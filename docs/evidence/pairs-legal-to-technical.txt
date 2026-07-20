@@ -1,0 +1,23 @@
+# Paired atlas item ids: a = Apache-2.0 legal prose, b = measurement design-note prose.
+# Every difference vector b-a encodes the same contrast (legal register -> engineering
+# register), so a shared direction should exist if the model represents one. Contrast
+# this with the sampled-pair run, where no candidate generalizes.
+# Built by pairing the two sources positionally; ids come from build_corpus.py.
+license-001,design-note-001
+license-002,design-note-002
+license-003,design-note-003
+license-004,design-note-004
+license-005,design-note-005
+license-006,design-note-006
+license-007,design-note-007
+license-008,design-note-008
+license-009,design-note-009
+license-010,design-note-010
+license-011,design-note-011
+license-012,design-note-012
+license-013,design-note-013
+license-014,design-note-014
+license-015,design-note-015
+license-016,design-note-016
+license-017,design-note-017
+license-018,design-note-018
