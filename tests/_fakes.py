@@ -65,6 +65,18 @@ import pytest
 # nothing in this codebase, CI, or a dev sandbox binds a *listening* server
 # there, so connecting to it on loopback reliably fails fast (connection
 # refused) rather than hanging.
+#
+# A second "reserved dead port" convention exists in tests/test_backend_client.py
+# (port 1, TCPMUX) rather than this one. Deliberately, not by drift: that
+# module picked port 1 because *binding* it requires root, which is a
+# stronger "nothing will ever listen here" guarantee than "nothing happens to
+# bind here today" — worth it for the one test in this suite that opens a
+# real socket against the real urllib transport. DEAD_PORT here optimises for
+# legibility (49213 reads as "nowhere real" without needing the root-binding
+# footnote) for the tests that only need an endpoint that is *currently*
+# unreachable, not one that is unreachable *by construction*. Both are
+# correct for what they guard; unify only if a change can drop one without
+# weakening either test's guarantee.
 DEAD_PORT = 49213
 DEAD_HOST = "127.0.0.1"
 
