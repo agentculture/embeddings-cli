@@ -5,6 +5,23 @@ All notable changes to this project will be documented in this file.
 Format follows [Keep a Changelog](https://keepachangelog.com/). This project
 adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.8.1] - 2026-07-20
+
+Review triage for PR #3 — Qodo and SonarCloud.
+
+### Fixed
+
+- **A short embed response silently misaligned the Atlas.** `EmbeddingClient.embed()` returned one vector per response entry with no length check, and `get_or_embed()` paired them to inputs with `zip()`, so a backend returning a short batch attached the wrong vector to the wrong text for every entry after the gap. The contract is now enforced once, where request and response are both in scope: `data` must be a list of exactly `len(texts)` entries, each a non-empty sequence of real numbers of consistent dimension (`bool` rejected — it is an `int` in Python but not a coordinate). The cache re-checks the count *before* its first write, because a poisoned cache entry outlives the misbehaving backend and is served on every later run.
+- **A missing `vectors.npy` surfaced as an `IndexError` frames from the cause.** Now distinguished deliberately: *absent* sidecars exit 1, because `.npy` is git-ignored by design and "records present, vectors absent" is the expected state of a freshly-cloned study — the hint says so, so a cloner does not go hunting a bug that does not exist. A sidecar that is *present but* malformed or too short for its records is real corruption and exits 2.
+- **`atomic_dir` leaked a full scratch copy on a failed replace.** `os.replace` sat in an `else:` clause with no cleanup, so an `ENOTEMPTY` left a complete copy of the just-built atlas as a dotted directory nobody would look at. Found via a Qodo aside rather than its headline.
+
+### Changed
+
+- **`cmd_compare` and `_parse_pairs_file` split into named helpers** (cognitive complexity 19 and 18, over the 15 allowed) — coherent sub-concepts, not metric-gaming, with no test assertion touched.
+- **31 `pytest.raises` blocks tightened** so only the statement under test can raise. A multi-statement block passes if *any* line raises, so setup could mask the assertion — a real false-green hazard in a suite whose job is guarding an error contract. No test was found to be passing for the wrong reason; this is a rename-proof guard against a hazard not yet exploited.
+- **The atomic helpers no longer claim power-loss durability.** They fsync the temp file but not the parent directory after `os.replace`, which is correct for their actual scope — process death, not power loss — since a per-write directory fsync would mean thousands of synchronous flushes per survey for a property no caller needs. The docstrings now say what is promised, what is not, and where the fix would go.
+- **`CLAUDE.md` described a repo that no longer exists** — it claimed the survey surface was unimplemented, that there were no runtime dependencies, and that Atlas persistence was an open question. The numpy claim in particular generated a false-positive review finding against our own stale doc.
+
 ## [0.8.0] - 2026-07-20
 
 ### Added
