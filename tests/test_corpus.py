@@ -212,3 +212,47 @@ def test_load_corpus_round_trip_preserves_all_keys() -> None:
         assert items[0].metadata["array"] == [1, 2, 3]
     finally:
         Path(path).unlink()
+
+
+# --------------------------------------------------------------------------
+# Duplicate ids (F1, found during the live end-to-end run)
+#
+# Ids are the join key for `neighbors --id`, `directions --pairs`, and
+# compare's probe matching. A duplicate silently resolved to whichever record
+# was read first, so every downstream lookup was wrong with nothing reporting
+# it. Refuse at load time.
+# --------------------------------------------------------------------------
+
+
+def test_duplicate_ids_are_refused_naming_both_lines(tmp_path) -> None:
+    corpus = tmp_path / "dupes.jsonl"
+    corpus.write_text(
+        '{"text": "first", "id": "shared"}\n'
+        '{"text": "second", "id": "other"}\n'
+        '{"text": "third", "id": "shared"}\n',
+        encoding="utf-8",
+    )
+    with pytest.raises(CliError) as exc:
+        load_corpus(str(corpus))
+    assert exc.value.code == 1
+    # Both the offending line and the first occurrence, so the fix is obvious.
+    assert "3" in exc.value.message and "1" in exc.value.message
+    assert "shared" in exc.value.message
+    assert "unique" in exc.value.remediation
+
+
+def test_auto_assigned_ids_never_collide(tmp_path) -> None:
+    """Omitting 'id' must stay safe — line indices are unique by construction."""
+    corpus = tmp_path / "auto.jsonl"
+    corpus.write_text("\n".join('{"text": "item %d"}' % n for n in range(5)), encoding="utf-8")
+    items = load_corpus(str(corpus))
+    assert len({item.id for item in items}) == 5
+
+
+def test_a_duplicate_of_an_auto_assigned_id_is_still_caught(tmp_path) -> None:
+    """An explicit id colliding with an auto-assigned index must not slip through."""
+    corpus = tmp_path / "mixed.jsonl"
+    corpus.write_text('{"text": "auto gets id 0"}\n{"text": "explicit", "id": "0"}\n', "utf-8")
+    with pytest.raises(CliError) as exc:
+        load_corpus(str(corpus))
+    assert exc.value.code == 1

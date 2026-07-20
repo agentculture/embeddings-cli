@@ -49,6 +49,7 @@ def load_corpus(path: str) -> list[CorpusItem]:
                   Error code is EXIT_USER_ERROR (1) and message includes line number.
     """
     items: list[CorpusItem] = []
+    seen_ids: dict[str, int] = {}  # id -> line it first appeared on
     corpus_path = Path(path)
 
     if not corpus_path.exists():
@@ -91,6 +92,25 @@ def load_corpus(path: str) -> list[CorpusItem]:
 
             # Collect metadata (all keys except 'text' and 'id')
             metadata = {k: v for k, v in obj.items() if k not in ("text", "id")}
+
+            if item_id in seen_ids:
+                # Ids are the join key for `neighbors --id`, `directions
+                # --pairs`, and compare's probe matching. A duplicate does not
+                # fail loudly on its own -- it silently resolves to whichever
+                # record was read first, so every downstream lookup is wrong in
+                # a way nothing reports. Refuse at load time instead.
+                raise CliError(
+                    code=EXIT_USER_ERROR,
+                    message=(
+                        f"duplicate record id {item_id!r} on line {line_num} "
+                        f"(first seen on line {seen_ids[item_id]})"
+                    ),
+                    remediation=(
+                        "give every record a unique 'id', or omit 'id' entirely to "
+                        "have line indices assigned automatically"
+                    ),
+                )
+            seen_ids[item_id] = line_num
 
             items.append(CorpusItem(text=text, id=item_id, metadata=metadata))
 
