@@ -44,11 +44,13 @@ The installed command is `embeddings`.
 - `embeddings overview` — descriptive snapshot of the agent.
 - `embeddings doctor` — check the agent-identity invariants.
 - `embeddings cli overview` — describe the CLI surface.
-
-## Planned verbs
-
-The survey surface is the target design and is **not yet implemented**:
-`survey`, `regions`, `neighbors`, `directions`, `gaps`, `compare`, `map`.
+- `embeddings survey <corpus>` — embed a corpus and write the atlas other verbs read.
+- `embeddings regions` — cluster a surveyed atlas into semantic regions, with stability.
+- `embeddings neighbors <text|--id id>` — k nearest atlas items by cosine distance.
+- `embeddings directions discover` — discover candidate semantic directions and test them.
+- `embeddings compare` — compare two atlases' k-NN and rank agreement on a shared probe set.
+- `embeddings gaps` — find corpus-coverage gaps, and (with `--probe`) model-representation ones.
+- `embeddings map` — PCA-project an atlas to 2-D, optionally writing an HTML artifact.
 
 ## Exit-code policy
 
@@ -61,6 +63,7 @@ The survey surface is the target design and is **not yet implemented**:
 
 - `embeddings explain whoami`
 - `embeddings explain doctor`
+- `embeddings explain survey`
 """
 
 _WHOAMI = """\
@@ -79,9 +82,10 @@ _LEARN = """\
 # embeddings learn
 
 Prints a structured self-teaching prompt covering purpose, command map,
-exit-code policy, `--json` support, and the `explain` pointer. Planned verbs are
-listed separately from implemented ones, so a roadmap verb is never mistaken for
-a callable one.
+exit-code policy, `--json` support, and the `explain` pointer. Every verb it
+lists as a command is a verb the parser actually registers; nothing on this
+CLI's roadmap remains unimplemented today, so there is no separate planned
+list to keep apart from it.
 
 ## Usage
 
@@ -140,6 +144,260 @@ itself (distinct from the global `overview`, which describes the agent).
     embeddings cli overview --json
 """
 
+_SURVEY = """\
+# embeddings survey <corpus>
+
+Embeds a JSONL corpus through the embedding backend and writes the Atlas
+every other reader verb (`regions`, `neighbors`, `directions`, `gaps`,
+`compare`, `map`) reads. A write verb: previews by default and performs
+**zero filesystem writes and zero backend calls** until `--apply` is given.
+`--apply` onto an existing atlas is refused unless `--force` is also given,
+which replaces the atlas whole rather than merging into it.
+
+## Usage
+
+    embeddings survey corpus.jsonl
+    embeddings survey corpus.jsonl --apply
+    embeddings survey corpus.jsonl --apply --force
+    embeddings survey corpus.jsonl --json
+
+## Key flags
+
+- `--apply` — actually embed and write the atlas (default: preview only).
+- `--force` — with `--apply`, replace an existing atlas at the target path.
+- `--atlas <path>` / `-o` — directory to write the atlas into (default: `./atlas`).
+- `--batch-size <n>` — texts per backend request (default: 64); each batch
+  reports progress to stderr.
+- `--retries <n>` — retries per batch on a transient (exit-2) backend
+  failure (default: 2).
+- `--seed <n>` — RNG seed recorded in the atlas manifest (default: 0).
+- `--embed-url` / `--embed-model` — override the embedding backend endpoint
+  and model.
+
+Corpus format: one JSON object per line, each with a `text` field (and an
+optional `id`; every other key is preserved as record metadata).
+"""
+
+_REGIONS = """\
+# embeddings regions
+
+Partitions a surveyed atlas into semantic regions with k-means, and reports
+each region's membership, representative items, and stability across seed
+reruns and bootstrap resamples. A region that survives only one parameter
+setting is reported with `asserted: false` and a `finding` string — never
+suppressed, since an unstable region is itself a finding.
+
+## Usage
+
+    embeddings regions
+    embeddings regions --clusters 8 --seed 1
+    embeddings regions --atlas path/to/atlas --json
+
+## Key flags
+
+- `--clusters <n>` / `-k` — number of regions to partition into (default: 5).
+- `--seed <n>` — base RNG seed; every rerun/resample seed derives from it
+  (default: 0).
+- `--runs <n>` — seed reruns for stability evidence; `--runs 1` with
+  `--resamples 0` reports "stability unverified" rather than a score.
+- `--resamples <n>` — bootstrap resamples of the item set.
+- `--representatives <n>` — items reported per region, nearest-centroid
+  first (default: 3).
+- `--atlas <path>` — atlas directory to read (default: `./atlas`).
+
+Requires an atlas written by `embeddings survey <corpus> --apply`. Reads only
+the atlas on disk; opens no socket.
+"""
+
+_NEIGHBORS = """\
+# embeddings neighbors <text|--id id>
+
+Finds the k nearest atlas items to a text query (embedded through the
+backend, then cached) or to an existing atlas item id (looked up on disk, no
+backend call at all), by cosine distance. Also reports a boundary
+description: the sorted distance-gap profile across the returned neighbors.
+
+## Usage
+
+    embeddings neighbors "agentic culture"
+    embeddings neighbors some-atlas-id --id
+    embeddings neighbors "query text" --top-k 10 --json
+
+## Key flags
+
+- `--id` — treat the positional argument as an existing atlas item id
+  rather than free text; this path never calls the embedding backend.
+- `-k` / `--top-k <n>` — neighbors to return (default: 5).
+- `--atlas <path>` — atlas directory to read (default: `./atlas`).
+- `--embed-url` / `--embed-model` — override the embedding backend; the
+  model defaults to the atlas's own model.
+
+The positional argument is always free text unless `--id` is passed — never
+guessed from its shape.
+"""
+
+_DIRECTIONS = """\
+# embeddings directions
+
+Proposes candidate semantic directions from paired items, and tests whether
+each one generalizes to pairs it was not derived from. A direction is a
+vector in the embedding space — never a coordinate index, and never given a
+human-readable label by this tool.
+
+## Sub-verbs
+
+- `embeddings directions discover` — derive candidates from training pairs,
+  test them on held-out pairs, and measure their stability.
+- `embeddings directions overview` — this description (also printed by a
+  bare `embeddings directions`).
+
+## Usage
+
+    embeddings directions overview
+    embeddings directions discover --pairs pairs.jsonl
+    embeddings directions discover --sample-pairs 64 --seed 0 --json
+
+Candidates that fail to generalize are still listed, marked
+`DOES NOT GENERALIZE`, and routed into `uncertain[]` — never dropped, since a
+pair set with no transferable direction is itself a finding.
+"""
+
+_DIRECTIONS_DISCOVER = """\
+# embeddings directions discover
+
+Derives candidate semantic directions from the training half of a pair set
+(the leading singular vectors of the training difference vectors), then
+measures each candidate against the held-out half it never saw. Reports the
+generalization result either way, plus a stability measurement across seed
+reruns and bootstrap resamples of the item bipartition each direction
+induces.
+
+## Usage
+
+    embeddings directions discover --pairs pairs.jsonl
+    embeddings directions discover --sample-pairs 64 --seed 0
+    embeddings directions discover --pairs pairs.jsonl --top 5 --json
+
+## Key flags
+
+- `--pairs <path>` — file of `(a, b)` atlas item-id pairs, one per line
+  (a JSON object `{"a": "<id>", "b": "<id>"}` or a bare `<id>,<id>` row).
+  Omit to sample pairs from the atlas instead.
+- `--sample-pairs <n>` — random pairs to sample when `--pairs` is omitted
+  (default: 64), seeded by `--seed`.
+- `--holdout <fraction>` — fraction of the pair set held out to test
+  generalization (default: 0.3); at least one pair always stays on each
+  side of the split.
+- `--top <n>` — how many candidate directions to propose (default: 3).
+- `--seed <n>` — base seed for the split, the sampling, and every stability
+  rerun (default: 0).
+- `--runs <n>` / `--resamples <n>` — stability-evidence controls.
+- `--include-vectors` — include each candidate's full vector in the output
+  (off by default; it dominates the payload at realistic dimensionality).
+
+Pairs name atlas item ids, not texts, so this verb never needs the
+embedding backend.
+"""
+
+_COMPARE = """\
+# embeddings compare
+
+Compares two already-surveyed atlases relationally: k-NN set overlap
+(Jaccard) and Spearman rank correlation on each model's own ordering of a
+shared probe set, each reported against a chance baseline. Never assumes,
+implies, or derives a value from a shared coordinate frame — no coordinate,
+distance, or cosine crosses between the two models, and neither model is
+ranked as better than the other.
+
+## Usage
+
+    embeddings compare --atlas-a atlas-model-a --atlas-b atlas-model-b
+    embeddings compare --atlas-a a --atlas-b b --top-k 5 --json
+
+## Key flags
+
+- `--atlas-a <path>` / `--atlas-b <path>` — the two atlas directories to
+  compare (both required).
+- `-k` / `--top-k <n>` — neighborhood size the Jaccard measure is
+  conditioned on (default: 10); the Spearman correlation runs over each
+  model's complete ordering and is not conditioned on k.
+- `--seed <n>` — recorded for provenance; the comparison itself is fully
+  deterministic and consumes no randomness.
+
+The two atlases must share a probe set: the same record ids, carrying
+identical text. Reads only the two atlases on disk; opens no socket.
+"""
+
+_GAPS = """\
+# embeddings gaps
+
+Finds under-covered areas of a surveyed atlas. Reports two kinds of finding
+as separate top-level keys, never merged: `corpus_coverage_findings` (sparse
+regions and inter-region voids — says nothing about model capability) and
+`model_representation_findings` (produced only by an active `--probe` step
+that embeds new inputs at probe time).
+
+## Usage
+
+    embeddings gaps
+    embeddings gaps --probe --probes probes.txt
+    embeddings gaps --probe --holdout 10 --json
+
+## Key flags
+
+- `--clusters <n>` / `-k` — regions to partition into before measuring
+  sparsity (default: 5).
+- `--sparsity-quantile <f>` — share of regions, most isolated first,
+  reported as sparse (default: 0.25).
+- `--void-factor <f>` — multiple of the corpus's own median
+  nearest-neighbor distance above which an inter-region midpoint counts as
+  a void (default: 2.0).
+- `--probe` — enable the probe step (**off by default**; this is the only
+  path in this verb that reaches the embedding backend).
+- `--probes <file>` — probe texts, one per line; requires `--probe`.
+- `--holdout <n>` — hold out n atlas items and re-embed their text as
+  probes; requires `--probe`.
+- `--coherence-factor <f>` — fraction of the corpus-wide baseline spread
+  below which probes count as cohering rather than scattering.
+
+A sparse corpus region is not, on its own, evidence the model cannot
+represent that area — only an active probe can test that.
+"""
+
+_MAP = """\
+# embeddings map
+
+Projects a surveyed atlas onto its two leading principal components (PCA,
+deterministic, computed on numpy alone) and reports how much of the total
+variance that 2-D view keeps. With `--html`, writes a single self-contained
+page carrying the plot, its full provenance, and the parameter-dependence
+caveat. A write verb: previews by default, `--apply` commits, `--force`
+replaces an existing file.
+
+## Usage
+
+    embeddings map
+    embeddings map --html atlas-map.html
+    embeddings map --html atlas-map.html --apply
+    embeddings map --clusters 0 --json
+
+## Key flags
+
+- `--html <path>` — write a self-contained single-file HTML artifact (no
+  external requests); preview-only without `--apply`.
+- `--apply` — actually write the `--html` artifact.
+- `--force` — with `--apply`, overwrite an existing file at `--html`.
+- `--clusters <n>` / `-k` — colour the map by a k-means partition into this
+  many groups (default: 5); `0` draws it uncoloured. The colouring always
+  ships with its own stability verdict.
+- `--seed <n>` — base seed for the colour clustering (the PCA projection
+  itself is deterministic and ignores it).
+
+Distances in the picture are not faithful to distances in the space —
+especially between apparent clusters — so the caveat travels inside the
+artifact itself, not just in this doc.
+"""
+
 
 ENTRIES: dict[tuple[str, ...], str] = {
     (): _ROOT,
@@ -152,4 +410,13 @@ ENTRIES: dict[tuple[str, ...], str] = {
     ("doctor",): _DOCTOR,
     ("cli",): _CLI,
     ("cli", "overview"): _CLI,
+    ("survey",): _SURVEY,
+    ("regions",): _REGIONS,
+    ("neighbors",): _NEIGHBORS,
+    ("directions",): _DIRECTIONS,
+    ("directions", "overview"): _DIRECTIONS,
+    ("directions", "discover"): _DIRECTIONS_DISCOVER,
+    ("compare",): _COMPARE,
+    ("gaps",): _GAPS,
+    ("map",): _MAP,
 }
