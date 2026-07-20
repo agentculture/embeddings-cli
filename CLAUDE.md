@@ -29,37 +29,48 @@ interpretation of the space, not the space itself.
 
 ### What exists today
 
-**The survey surface is not implemented.** On disk is the agent-first CLI
-skeleton this repo was cloned from (`culture-agent-template`, renamed) — the
-introspection verbs `whoami`, `learn`, `explain`, `overview`, `doctor`,
-`cli overview`, and no third-party runtime dependency. There is no corpus,
-embedding, survey, region, neighborhood, direction, or atlas code.
+**The survey surface ships.** All seven verbs are implemented, registered, and
+callable — `survey`, `regions`, `neighbors`, `directions discover` /
+`directions overview`, `compare`, `gaps`, `map` — alongside the introspection
+verbs `whoami`, `learn`, `explain`, `overview`, `doctor`, `cli overview`. The
+package persists an Atlas (`embeddings/atlas/`), talks to an embedding gateway
+(`embeddings/backends/`), and measures stability (`embeddings/measure/`).
 
-The planned verbs — `survey`, `regions`, `neighbors`, `directions`, `gaps`,
-`compare`, `map` — are named in `README.md`, `learn.py`, `explain/catalog.py`,
-and `overview.py` under explicit *planned / not yet implemented* headings. Keep
-that separation when you touch those files: an agent reading `learn` or
-`overview` must never mistake a roadmap verb for a callable one. Keep new
+**`numpy` is a runtime dependency, deliberately.** The template's
+"no third-party runtime dependencies" property was inherited, not chosen, and
+it is incompatible with being a measurement tool: clustering, direction
+discovery, density measurement, and the projection behind `map` all need it.
+The dependency was spec'd and confirmed before it landed. Nothing in CI ever
+enforced zero-deps — `teken cli doctor --strict` checks CLI *shape*, not
+dependencies — so this was a choice, and it is now made. **Static analysers
+that flag `numpy` under `embeddings/` as a rule violation are reading a rule
+this file no longer states.** Adding a *further* runtime dependency is still a
+deliberate decision, not a routine one: prefer numpy-only implementations
+(that is why ARI, Spearman, k-means, and PCA are hand-written here rather than
+pulled from scipy/scikit-learn).
+
+The planned/implemented separation is still load-bearing in the four surfaces
+that advertise the verb list — `README.md`, `learn.py`, `explain/catalog.py`,
+`overview.py`. Nothing remains planned today, and
+`tests/test_roadmap_lockstep.py` derives the truth from the registered parser,
+so those four can no longer drift from what is actually callable. Keep new
 sections of this file grounded in checked-in reality and mark anything ahead of
 it `(planned)`.
 
-### Design constraints the domain will force
+### Design constraints the domain forced
 
-Worth settling deliberately rather than mid-build:
+Settled during the build; kept here because the reasoning still binds:
 
-- **Runtime dependencies.** Clustering, direction discovery, density/coverage
-  measurement, and `map --html` all need numpy at minimum, plus an embedding
-  backend. The current "no third-party runtime dependencies" property is
-  inherited from being a template and is incompatible with being a measurement
-  tool. Nothing in CI enforces it — `teken cli doctor --strict` checks CLI
-  shape, not deps — so this is a choice, not a blocker.
 - **Rubric shape of the new verbs.** `directions discover` is a noun with an
-  action-verb, so `directions` will also need an `overview` sub-verb to pass the
+  action-verb, so `directions` also exposes an `overview` sub-verb to pass the
   rubric (see `cli.py` for the pattern). `survey`, `compare`, and `map` read as
   global verbs. Every new sub-verb needs its own `--json`.
-- **Atlas persistence.** `survey` produces state that `regions` / `gaps` /
-  `compare` later read. Nothing today writes to disk, so the storage format and
-  its location are entirely open.
+- **Atlas persistence.** `survey` writes the state every reader verb loads. The
+  Atlas is a directory: `atlas.json` (manifest), `records.jsonl`, and `.npy`
+  vector sidecars. The manifest, records, and measurements are the *committable
+  interpretation*; the sidecars are regenerable bulk and are git-ignored. That
+  split is the "the Atlas is not the space" distinction made physical, so a
+  freshly-cloned study legitimately has records but no vectors.
 
 It is a sibling to [`guildmaster`](https://github.com/agentculture/guildmaster)
 (the **skills supplier**), [`steward`](https://github.com/agentculture/steward)
@@ -89,8 +100,9 @@ either spelling resolves.
 ## The CLI
 
 The CLI is cited (cite-don't-import) from teken's `python-cli` reference
-(`teken cli cite`), so the runtime package has **no third-party dependencies**;
-`teken` (a.k.a. `afi-cli`) is a dev dependency only. The agent-first rubric is
+(`teken cli cite`); `teken` (a.k.a. `afi-cli`) is a dev dependency only. The
+runtime package's only third-party dependency is **numpy** — see
+*What exists today* above for why that is deliberate. The agent-first rubric is
 enforced in CI by `teken cli doctor . --strict`.
 
 ### Structure and the contract each part holds

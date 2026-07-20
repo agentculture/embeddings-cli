@@ -17,7 +17,21 @@ config:
 ignores:
   - "node_modules/**"
   - ".local/**"
+  # Installed dependencies ship their own markdown (numpy vendors LICENSE.md).
+  # CI runs `uv sync` before linting, so without this the glob walks the venv
+  # and fails on third-party files we neither own nor can fix.
+  - ".venv/**"
+  - "venv/**"
   - ".afi/**"
   - ".teken/**"
   # Vendored skills are cited verbatim from guildmaster — do not reformat them.
   - ".claude/skills/**"
+  # devague renders these deterministically from frame/plan state, so claim text
+  # like `<corpus>` or `_errors.py` reaches the page as inline HTML or stray
+  # emphasis. Any hand-fix is lost on the next `devague export` — the source of
+  # truth is `.devague/`, not the rendered file.
+  - "docs/specs/**"
+  - "docs/plans/**"
+  # devague's own working state (frames, reviews, pending questions). Rendered
+  # by the tool, and mostly git-ignored — but the lint glob still walks it.
+  - ".devague/**"

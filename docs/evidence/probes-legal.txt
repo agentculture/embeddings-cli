@@ -1,0 +1,20 @@
+# Probe inputs for the sparsest region of the evidence atlas (18 items, the
+# Apache-2.0 licence block). These are held-out legal-boilerplate sentences
+# written for this run -- none of them appears in the surveyed corpus.
+#
+# The question they test: the corpus covers this area thinly, but is that a
+# corpus fact or a model fact? If these land coherently near the region, the
+# sparsity was a corpus artifact and the model represents the register fine.
+# If they scatter, that is evidence about the representation.
+#
+# Fair-instance caveat: these are paraphrases of standard licence language, so
+# they are fair instances of "legal boilerplate" but not of Apache-2.0 in
+# particular. Judge the finding against that.
+Redistribution in binary form must reproduce the above copyright notice in the documentation accompanying the distribution.
+The Licensor grants You a perpetual, worldwide, non-exclusive, royalty-free licence to reproduce and distribute the Work.
+In no event shall any Contributor be liable for damages arising as a result of this License or out of the use of the Work.
+You may add Your own attribution notices within Derivative Works that You distribute, alongside the existing notices.
+This License does not grant permission to use the trade names, trademarks, or product names of the Licensor.
+Each Contributor hereby grants You a patent licence to make, use, sell, and otherwise transfer the Work.
+Subject to the terms and conditions of this License, the rights granted herein are effective on the date the Work is first distributed.
+Nothing in this section shall be construed as modifying the terms of any separate agreement executed between the parties.
