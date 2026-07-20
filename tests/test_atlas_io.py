@@ -201,9 +201,12 @@ def test_write_atlas_interrupted_leaves_no_partial_directory(
         raise RuntimeError("simulated interruption while writing vectors")
 
     monkeypatch.setattr(np, "save", _boom)
+    manifest = _manifest()
+    records = _records()
+    vectors = _vectors()
 
     with pytest.raises(RuntimeError, match="simulated interruption"):
-        write_atlas(_manifest(), _records(), _vectors(), path=target)
+        write_atlas(manifest, records, vectors, path=target)
 
     assert not target.exists()
     # no stray scratch directory left behind next to the target either
@@ -221,9 +224,12 @@ def test_write_atlas_interrupted_preserves_previously_written_atlas(
         raise RuntimeError("simulated interruption on re-survey")
 
     monkeypatch.setattr(np, "save", _boom)
+    manifest = _manifest(seed=2)
+    records = _records()
+    vectors = _vectors()
 
     with pytest.raises(RuntimeError):
-        write_atlas(_manifest(seed=2), _records(), _vectors(), path=target, overwrite=True)
+        write_atlas(manifest, records, vectors, path=target, overwrite=True)
 
     # the *new* atlas never landed, but the interruption path here removes the
     # old one first (see write_atlas's documented overwrite behaviour) — the
@@ -242,9 +248,12 @@ def test_write_atlas_interrupted_preserves_previously_written_atlas(
 def test_write_atlas_refuses_to_overwrite_by_default(tmp_path: Path) -> None:
     target = tmp_path / "atlas"
     write_atlas(_manifest(), _records(), _vectors(), path=target)
+    manifest = _manifest(seed=99)
+    records = _records()
+    vectors = _vectors()
 
     with pytest.raises(CliError) as exc_info:
-        write_atlas(_manifest(seed=99), _records(), _vectors(), path=target)
+        write_atlas(manifest, records, vectors, path=target)
 
     assert exc_info.value.code == EXIT_USER_ERROR
     assert exc_info.value.remediation  # a hint is present
@@ -277,16 +286,21 @@ def test_write_atlas_overwrite_true_replaces_whole_not_merged(tmp_path: Path) ->
 
 def test_write_atlas_rejects_non_2d_vectors(tmp_path: Path) -> None:
     target = tmp_path / "atlas"
+    manifest = _manifest()
+    records = _records()
+    vectors = np.array([0.1, 0.2, 0.3])
     with pytest.raises(ValueError):
-        write_atlas(_manifest(), _records(), np.array([0.1, 0.2, 0.3]), path=target)
+        write_atlas(manifest, records, vectors, path=target)
     assert not target.exists()
 
 
 def test_write_atlas_rejects_out_of_bounds_vector_index(tmp_path: Path) -> None:
     target = tmp_path / "atlas"
     records = [AtlasRecord(id="0", text="hi", vector_index=5)]  # only 1 vector below
+    manifest = _manifest()
+    vectors = np.array([[0.1, 0.2]], dtype=np.float32)
     with pytest.raises(ValueError):
-        write_atlas(_manifest(), records, np.array([[0.1, 0.2]], dtype=np.float32), path=target)
+        write_atlas(manifest, records, vectors, path=target)
     assert not target.exists()
 
 

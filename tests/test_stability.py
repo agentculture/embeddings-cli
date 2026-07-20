@@ -427,8 +427,9 @@ def test_invalid_arguments_are_rejected():
         measure_stability(data, sign_clustering, params={}, seed=1, runs=0)
     with pytest.raises(CliError):
         measure_stability(data, sign_clustering, params={}, seed=1, runs=2, resamples=-1)
+    empty_data = np.empty((0, 3))
     with pytest.raises(CliError):
-        measure_stability(np.empty((0, 3)), sign_clustering, params={}, seed=1, runs=2)
+        measure_stability(empty_data, sign_clustering, params={}, seed=1, runs=2)
 
 
 # --------------------------------------------------------------------------

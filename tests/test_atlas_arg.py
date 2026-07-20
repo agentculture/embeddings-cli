@@ -129,9 +129,10 @@ def test_resolve_atlas_path_honours_an_explicit_atlas_flag(tmp_path: Path) -> No
 
 def test_load_atlas_missing_directory_exits_1_with_exact_hint(tmp_path: Path) -> None:
     missing = tmp_path / "does-not-exist"
+    args = _args(str(missing))
 
     with pytest.raises(CliError) as exc_info:
-        load_atlas(_args(str(missing)))
+        load_atlas(args)
 
     err = exc_info.value
     assert err.code == EXIT_USER_ERROR
@@ -143,9 +144,10 @@ def test_load_atlas_default_path_missing_exits_1_with_exact_hint(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
     monkeypatch.chdir(tmp_path)
+    args = _args()
 
     with pytest.raises(CliError) as exc_info:
-        load_atlas(_args())
+        load_atlas(args)
 
     assert exc_info.value.code == EXIT_USER_ERROR
     assert exc_info.value.remediation == MISSING_ATLAS_HINT
@@ -155,9 +157,10 @@ def test_load_atlas_path_exists_but_is_not_an_atlas_directory_exits_1(tmp_path: 
     not_an_atlas = tmp_path / "not-an-atlas"
     not_an_atlas.mkdir()
     (not_an_atlas / "some-other-file.txt").write_text("nope", encoding="utf-8")
+    args = _args(str(not_an_atlas))
 
     with pytest.raises(CliError) as exc_info:
-        load_atlas(_args(str(not_an_atlas)))
+        load_atlas(args)
 
     err = exc_info.value
     assert err.code == EXIT_USER_ERROR
@@ -170,11 +173,13 @@ def test_missing_directory_and_invalid_directory_get_distinct_messages(tmp_path:
     missing = tmp_path / "does-not-exist"
     invalid = tmp_path / "invalid"
     invalid.mkdir()
+    missing_args = _args(str(missing))
+    invalid_args = _args(str(invalid))
 
     with pytest.raises(CliError) as missing_exc:
-        load_atlas(_args(str(missing)))
+        load_atlas(missing_args)
     with pytest.raises(CliError) as invalid_exc:
-        load_atlas(_args(str(invalid)))
+        load_atlas(invalid_args)
 
     assert missing_exc.value.code == EXIT_USER_ERROR
     assert invalid_exc.value.code == EXIT_USER_ERROR
@@ -218,9 +223,10 @@ def test_load_atlas_default_path_succeeds_with_no_gateway_reachable(
 def test_load_atlas_version_mismatch_exits_2(tmp_path: Path) -> None:
     target = tmp_path / "atlas"
     _write_version_mismatched_atlas(target, SCHEMA_VERSION + 1)
+    args = _args(str(target))
 
     with pytest.raises(CliError) as exc_info:
-        load_atlas(_args(str(target)))
+        load_atlas(args)
 
     err = exc_info.value
     assert err.code == EXIT_ENV_ERROR
@@ -231,9 +237,10 @@ def test_load_atlas_version_mismatch_exits_2(tmp_path: Path) -> None:
 def test_load_atlas_unknown_version_exits_2(tmp_path: Path) -> None:
     target = tmp_path / "atlas"
     _write_version_mismatched_atlas(target, 999999)
+    args = _args(str(target))
 
     with pytest.raises(CliError) as exc_info:
-        load_atlas(_args(str(target)))
+        load_atlas(args)
 
     assert exc_info.value.code == EXIT_ENV_ERROR
 
@@ -244,11 +251,13 @@ def test_missing_atlas_and_version_mismatch_are_distinguishable_exit_codes(
     missing = tmp_path / "does-not-exist"
     mismatched = tmp_path / "mismatched"
     _write_version_mismatched_atlas(mismatched, SCHEMA_VERSION + 1)
+    missing_args = _args(str(missing))
+    mismatched_args = _args(str(mismatched))
 
     with pytest.raises(CliError) as missing_exc:
-        load_atlas(_args(str(missing)))
+        load_atlas(missing_args)
     with pytest.raises(CliError) as mismatch_exc:
-        load_atlas(_args(str(mismatched)))
+        load_atlas(mismatched_args)
 
     assert missing_exc.value.code == EXIT_USER_ERROR
     assert mismatch_exc.value.code == EXIT_ENV_ERROR
@@ -260,9 +269,10 @@ def test_load_atlas_version_mismatch_never_reaches_the_missing_atlas_hint(tmp_pa
     its remediation must not be the exit-1 missing-atlas hint."""
     target = tmp_path / "atlas"
     _write_version_mismatched_atlas(target, SCHEMA_VERSION + 1)
+    args = _args(str(target))
 
     with pytest.raises(CliError) as exc_info:
-        load_atlas(_args(str(target)))
+        load_atlas(args)
 
     assert exc_info.value.remediation != MISSING_ATLAS_HINT
 

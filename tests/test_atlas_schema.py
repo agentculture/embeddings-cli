@@ -65,25 +65,29 @@ def test_manifest_accepts_empty_limitations_and_uncertain_as_a_deliberate_claim(
     ["schema_version", "model", "endpoint", "params", "seed", "limitations", "uncertain"],
 )
 def test_omitting_any_required_field_raises(missing: str) -> None:
+    kwargs = _kwargs_without(missing)
     with pytest.raises(TypeError):
-        AtlasManifest(**_kwargs_without(missing))
+        AtlasManifest(**kwargs)
 
 
 def test_omitting_limitations_raises() -> None:
     """Named explicitly per acceptance criteria, in addition to the sweep above."""
+    kwargs = _kwargs_without("limitations")
     with pytest.raises(TypeError):
-        AtlasManifest(**_kwargs_without("limitations"))
+        AtlasManifest(**kwargs)
 
 
 def test_omitting_uncertain_raises() -> None:
     """Named explicitly per acceptance criteria, in addition to the sweep above."""
+    kwargs = _kwargs_without("uncertain")
     with pytest.raises(TypeError):
-        AtlasManifest(**_kwargs_without("uncertain"))
+        AtlasManifest(**kwargs)
 
 
 def test_omitting_both_limitations_and_uncertain_raises() -> None:
+    kwargs = _kwargs_without("limitations", "uncertain")
     with pytest.raises(TypeError):
-        AtlasManifest(**_kwargs_without("limitations", "uncertain"))
+        AtlasManifest(**kwargs)
 
 
 # --- limitations/uncertain are non-optional *schema* fields, not convention ---
@@ -134,24 +138,28 @@ def test_manifest_field_names_match_the_required_set() -> None:
 
 @pytest.mark.parametrize("bad_value", [None, "a single string is not a list", 42, {"a": 1}])
 def test_limitations_rejects_non_list_values(bad_value: object) -> None:
+    kwargs = _kwargs_without("limitations")
     with pytest.raises(TypeError):
-        AtlasManifest(**_kwargs_without("limitations"), limitations=bad_value)
+        AtlasManifest(**kwargs, limitations=bad_value)
 
 
 @pytest.mark.parametrize("bad_value", [None, "a single string is not a list", 42, {"a": 1}])
 def test_uncertain_rejects_non_list_values(bad_value: object) -> None:
+    kwargs = _kwargs_without("uncertain")
     with pytest.raises(TypeError):
-        AtlasManifest(**_kwargs_without("uncertain"), uncertain=bad_value)
+        AtlasManifest(**kwargs, uncertain=bad_value)
 
 
 def test_limitations_rejects_list_with_non_string_items() -> None:
+    kwargs = _kwargs_without("limitations")
     with pytest.raises(TypeError):
-        AtlasManifest(**_kwargs_without("limitations"), limitations=[123])
+        AtlasManifest(**kwargs, limitations=[123])
 
 
 def test_uncertain_rejects_list_with_non_string_items() -> None:
+    kwargs = _kwargs_without("uncertain")
     with pytest.raises(TypeError):
-        AtlasManifest(**_kwargs_without("uncertain"), uncertain=[123])
+        AtlasManifest(**kwargs, uncertain=[123])
 
 
 # --- SCHEMA_VERSION is the shared stamp/compare constant --------------------
