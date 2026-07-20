@@ -1,0 +1,19 @@
+{
+  "schema_version": 1,
+  "model": "Qwen/Qwen3-Embedding-0.6B",
+  "endpoint": "http://localhost:8001/v1",
+  "params": {
+    "corpus": "docs/studies/probe-corpus-instruct.jsonl",
+    "corpus_items": 120,
+    "unique_texts": 120,
+    "batch_size": 64,
+    "retries": 2,
+    "cache_hits": 0,
+    "embedded_live": 120
+  },
+  "seed": 0,
+  "limitations": [
+    "live-embedding float variance: some vectors in this atlas were embedded live rather than served from the embed cache. GPU inference is not bit-deterministic (kernel selection, reduction order, batch- and load-dependent code paths), so re-running this survey may produce vectors that differ at float precision, and downstream clustering can amplify such a difference into a different partition near a decision boundary. This atlas is the reproducibility boundary: everything derived from it is exact, everything upstream of it is approximate. See docs/design-notes/semantic-measurement.md."
+  ],
+  "uncertain": []
+}
