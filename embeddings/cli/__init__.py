@@ -91,6 +91,9 @@ def _build_parser() -> argparse.ArgumentParser:
     _overview_cmd.register(sub)
     _doctor_cmd.register(sub)
     _cli_group.register(sub)
+    from embeddings.cli._commands import survey as _survey_cmd
+
+    _survey_cmd.register(sub)
     # Register your own noun groups here:
     #   from embeddings.cli._commands import my_noun as _my_noun_group
     #   _my_noun_group.register(sub)
