@@ -108,6 +108,11 @@ MIN_HELDOUT_AGREEMENT_RATE = 0.75
 
 _ROUND_DIGITS = 6
 
+#: ``--json`` is repeated on every sub-verb's own parser (argparse does not
+#: inherit a parent's flags), so this noun group's three ``add_argument``
+#: calls for it share one literal rather than three that could drift apart.
+JSON_HELP = "Emit structured JSON."
+
 _FRAMING_LIMITATION = (
     "a candidate direction is a vector in the embedding space, not a coordinate: this "
     "output never names or interprets an individual dimension"
@@ -132,16 +137,9 @@ def _round(value: float) -> float:
 # --------------------------------------------------------------------------
 
 
-def _parse_pairs_file(path: Path) -> list[tuple[str, str]]:
-    """Read ``(a, b)`` item-id pairs from a JSONL or two-column CSV file.
-
-    Blank lines and ``#`` comments are skipped. Both line shapes are accepted on
-    the same file, decided per line, because the two spellings cost nothing to
-    support and a caller generating one of them should not have to find out which
-    this verb wanted.
-    """
+def _read_pairs_file(path: Path) -> str:
     try:
-        raw = path.read_text(encoding="utf-8")
+        return path.read_text(encoding="utf-8")
     except FileNotFoundError as err:
         raise _user_error(
             f"no pairs file at {path}",
@@ -154,34 +152,60 @@ def _parse_pairs_file(path: Path) -> list[tuple[str, str]]:
             "check the path and its permissions",
         ) from err
 
+
+def _parse_pair_json_line(path: Path, number: int, stripped: str) -> tuple[str, str]:
+    """Parse one ``{"a": ..., "b": ...}`` line of a pairs file."""
+    try:
+        payload = json.loads(stripped)
+    except json.JSONDecodeError as err:
+        raise _user_error(
+            f"{path} line {number} is not valid JSON: {err}",
+            'each line must be {"a": "<item id>", "b": "<item id>"} or a bare '
+            "'<item id>,<item id>' row",
+        ) from err
+    if not isinstance(payload, dict) or "a" not in payload or "b" not in payload:
+        raise _user_error(
+            f"{path} line {number} has no 'a'/'b' keys",
+            'each JSON line must carry both ids, e.g. {"a": "item-1", "b": "item-2"}',
+        )
+    return (str(payload["a"]), str(payload["b"]))
+
+
+def _parse_pair_csv_line(path: Path, number: int, stripped: str) -> tuple[str, str]:
+    """Parse one bare ``<item id>,<item id>`` line of a pairs file."""
+    fields = [field.strip() for field in stripped.split(",")]
+    if len(fields) != 2 or not all(fields):
+        raise _user_error(
+            f"{path} line {number} is not a two-column '<item id>,<item id>' row",
+            'use two comma-separated item ids per line, or JSON objects with "a"/"b"',
+        )
+    return (fields[0], fields[1])
+
+
+def _parse_pair_line(path: Path, number: int, line: str) -> tuple[str, str] | None:
+    """One line of a pairs file, dispatched by shape; ``None`` for blank/``#`` lines.
+
+    Both the JSON-object and bare-CSV spellings are accepted in the same file,
+    decided per line, because the two spellings cost nothing to support and a
+    caller generating one of them should not have to find out which this verb
+    wanted.
+    """
+    stripped = line.strip()
+    if not stripped or stripped.startswith("#"):
+        return None
+    if stripped.startswith("{"):
+        return _parse_pair_json_line(path, number, stripped)
+    return _parse_pair_csv_line(path, number, stripped)
+
+
+def _parse_pairs_file(path: Path) -> list[tuple[str, str]]:
+    """Read ``(a, b)`` item-id pairs from a JSONL or two-column CSV file."""
+    raw = _read_pairs_file(path)
     pairs: list[tuple[str, str]] = []
     for number, line in enumerate(raw.splitlines(), start=1):
-        stripped = line.strip()
-        if not stripped or stripped.startswith("#"):
-            continue
-        if stripped.startswith("{"):
-            try:
-                payload = json.loads(stripped)
-            except json.JSONDecodeError as err:
-                raise _user_error(
-                    f"{path} line {number} is not valid JSON: {err}",
-                    'each line must be {"a": "<item id>", "b": "<item id>"} or a bare '
-                    "'<item id>,<item id>' row",
-                ) from err
-            if not isinstance(payload, dict) or "a" not in payload or "b" not in payload:
-                raise _user_error(
-                    f"{path} line {number} has no 'a'/'b' keys",
-                    'each JSON line must carry both ids, e.g. {"a": "item-1", "b": "item-2"}',
-                )
-            pairs.append((str(payload["a"]), str(payload["b"])))
-            continue
-        fields = [field.strip() for field in stripped.split(",")]
-        if len(fields) != 2 or not all(fields):
-            raise _user_error(
-                f"{path} line {number} is not a two-column '<item id>,<item id>' row",
-                'use two comma-separated item ids per line, or JSON objects with "a"/"b"',
-            )
-        pairs.append((fields[0], fields[1]))
+        parsed = _parse_pair_line(path, number, line)
+        if parsed is not None:
+            pairs.append(parsed)
     return pairs
 
 
@@ -658,7 +682,7 @@ def register(sub: argparse._SubParsersAction) -> None:
             "negative results, never hidden."
         ),
     )
-    p.add_argument("--json", action="store_true", help="Emit structured JSON.")
+    p.add_argument("--json", action="store_true", help=JSON_HELP)
     add_atlas_argument(p)
     p.set_defaults(func=_no_verb, json=False)
     # `p` is a _CliArgumentParser (the top-level subparsers were built with that
@@ -682,7 +706,7 @@ def register(sub: argparse._SubParsersAction) -> None:
         "path argument never hard-fails a descriptive verb.",
     )
     add_atlas_argument(ov)
-    ov.add_argument("--json", action="store_true", help="Emit structured JSON.")
+    ov.add_argument("--json", action="store_true", help=JSON_HELP)
     ov.set_defaults(func=cmd_directions_overview)
 
     dis = noun_sub.add_parser(
@@ -754,5 +778,5 @@ def register(sub: argparse._SubParsersAction) -> None:
         help="Include each candidate direction's full vector in the output. Off by default "
         "because it dominates the payload at realistic dimensionalities.",
     )
-    dis.add_argument("--json", action="store_true", help="Emit structured JSON.")
+    dis.add_argument("--json", action="store_true", help=JSON_HELP)
     dis.set_defaults(func=cmd_discover)

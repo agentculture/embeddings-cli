@@ -575,25 +575,23 @@ def _load(flag: str, raw_path: str) -> Atlas:
         ) from err
 
 
-def cmd_compare(args: argparse.Namespace) -> int:
-    json_mode = bool(getattr(args, "json", False))
-    k = int(args.top_k)
-    seed = int(args.seed)
-
+def _validate_top_k(k: int) -> None:
     if k < 1:
         raise _user_error(
             f"--top-k must be a positive integer, got {k}",
             f"pass --top-k 1 or higher (default: {DEFAULT_TOP_K})",
         )
 
-    path_a = Path(args.atlas_a)
-    path_b = Path(args.atlas_b)
-    atlas_a = _load("--atlas-a", str(path_a))
-    atlas_b = _load("--atlas-b", str(path_b))
 
-    ids, rows_a, rows_b, mismatches = _build_probe_set(atlas_a, atlas_b)
-    probe_items = len(ids)
+def _validate_probe_set(
+    *, probe_items: int, mismatches: int, k: int, path_a: Path, path_b: Path
+) -> None:
+    """The three ways a probe set can be unusable for a k-NN agreement measure.
 
+    Split from :func:`cmd_compare` because these are the same kind of check —
+    "is there enough shared, well-formed evidence to measure agreement at all"
+    — applied in sequence, and grouping them keeps that intent in one place.
+    """
     if probe_items == 0:
         raise _user_error(
             f"the two atlases share no probe items ({path_a} and {path_b} have no record ids "
@@ -614,21 +612,33 @@ def cmd_compare(args: argparse.Namespace) -> int:
             "shared corpus",
         )
 
-    order_a = _neighbor_order(atlas_a.vectors[rows_a])
-    order_b = _neighbor_order(atlas_b.vectors[rows_b])
-    positions_a = _rank_positions(order_a)
-    positions_b = _rank_positions(order_b)
 
+def _agreement_per_item(
+    *,
+    ids: Sequence[str],
+    order_a: np.ndarray,
+    order_b: np.ndarray,
+    positions_a: np.ndarray,
+    positions_b: np.ndarray,
+    k: int,
+) -> tuple[list[dict[str, object]], list[float], list[float]]:
+    """Per-probe-item Jaccard and Spearman agreement — the located, re-runnable findings.
+
+    Returns ``(per_item, jaccard_values, spearman_values)``: the located
+    per-item records for the payload, plus the two raw value lists the
+    distribution summaries in :func:`cmd_compare` are built from.
+    """
+    probe_items = len(ids)
+    all_indices = np.arange(probe_items, dtype=np.int64)
     per_item: list[dict[str, object]] = []
     jaccard_values: list[float] = []
     spearman_values: list[float] = []
-    all_indices = np.arange(probe_items, dtype=np.int64)
 
     for index, item_id in enumerate(ids):
         top_a = order_a[index, :k]
         top_b = order_b[index, :k]
-        set_a = set(int(value) for value in top_a)
-        set_b = set(int(value) for value in top_b)
+        set_a = {int(value) for value in top_a}
+        set_b = {int(value) for value in top_b}
         union = sorted(set_a | set_b)
         overlap = jaccard(set_a, set_b)
         jaccard_values.append(overlap)
@@ -655,18 +665,29 @@ def cmd_compare(args: argparse.Namespace) -> int:
             }
         )
 
-    jaccard_distribution = AgreementDistribution.from_values(MEASURE_JACCARD, jaccard_values)
-    rank_distribution = (
-        AgreementDistribution.from_values(MEASURE_SPEARMAN, spearman_values)
-        if spearman_values
-        else None
-    )
+    return per_item, jaccard_values, spearman_values
 
-    baseline = chance_baseline(probe_items=probe_items, k=k)
-    expected_jaccard = float(baseline["expected_knn_jaccard"])  # type: ignore[arg-type]
-    baseline["observed_above_chance"] = _round(jaccard_distribution.mean - expected_jaccard)
 
-    same_model = atlas_a.manifest.model == atlas_b.manifest.model
+def _build_notes(
+    *,
+    atlas_a: Atlas,
+    atlas_b: Atlas,
+    same_model: bool,
+    path_a: Path,
+    path_b: Path,
+    k: int,
+    probe_items: int,
+    expected_jaccard: float,
+    rank_distribution: AgreementDistribution | None,
+    mismatches: int,
+) -> list[str]:
+    """The caveats worth surfacing next to this run's numbers, in a fixed order.
+
+    Each condition below is independent of the others, so this is a flat
+    sequence of checks rather than nested logic — extracted purely to keep
+    that sequence (and the seed note it always starts with) out of the
+    handler's own control flow.
+    """
     notes: list[str] = [SEED_NOTE]
     if same_model:
         notes.append(
@@ -694,6 +715,64 @@ def cmd_compare(args: argparse.Namespace) -> int:
             f"{mismatches} record id(s) present in both atlases were excluded because their "
             "text differs — the same id over different text is not the same probe item"
         )
+    return notes
+
+
+def cmd_compare(args: argparse.Namespace) -> int:
+    json_mode = bool(getattr(args, "json", False))
+    k = int(args.top_k)
+    seed = int(args.seed)
+    _validate_top_k(k)
+
+    path_a = Path(args.atlas_a)
+    path_b = Path(args.atlas_b)
+    atlas_a = _load("--atlas-a", str(path_a))
+    atlas_b = _load("--atlas-b", str(path_b))
+
+    ids, rows_a, rows_b, mismatches = _build_probe_set(atlas_a, atlas_b)
+    probe_items = len(ids)
+    _validate_probe_set(
+        probe_items=probe_items, mismatches=mismatches, k=k, path_a=path_a, path_b=path_b
+    )
+
+    order_a = _neighbor_order(atlas_a.vectors[rows_a])
+    order_b = _neighbor_order(atlas_b.vectors[rows_b])
+    positions_a = _rank_positions(order_a)
+    positions_b = _rank_positions(order_b)
+
+    per_item, jaccard_values, spearman_values = _agreement_per_item(
+        ids=ids,
+        order_a=order_a,
+        order_b=order_b,
+        positions_a=positions_a,
+        positions_b=positions_b,
+        k=k,
+    )
+
+    jaccard_distribution = AgreementDistribution.from_values(MEASURE_JACCARD, jaccard_values)
+    rank_distribution = (
+        AgreementDistribution.from_values(MEASURE_SPEARMAN, spearman_values)
+        if spearman_values
+        else None
+    )
+
+    baseline = chance_baseline(probe_items=probe_items, k=k)
+    expected_jaccard = float(baseline["expected_knn_jaccard"])  # type: ignore[arg-type]
+    baseline["observed_above_chance"] = _round(jaccard_distribution.mean - expected_jaccard)
+
+    same_model = atlas_a.manifest.model == atlas_b.manifest.model
+    notes = _build_notes(
+        atlas_a=atlas_a,
+        atlas_b=atlas_b,
+        same_model=same_model,
+        path_a=path_a,
+        path_b=path_b,
+        k=k,
+        probe_items=probe_items,
+        expected_jaccard=expected_jaccard,
+        rank_distribution=rank_distribution,
+        mismatches=mismatches,
+    )
 
     params: dict[str, object] = {
         "k": k,
