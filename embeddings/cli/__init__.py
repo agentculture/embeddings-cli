@@ -97,6 +97,9 @@ def _build_parser() -> argparse.ArgumentParser:
     # Register your own noun groups here:
     #   from embeddings.cli._commands import my_noun as _my_noun_group
     #   _my_noun_group.register(sub)
+    from embeddings.cli._commands import neighbors as _neighbors_cmd
+
+    _neighbors_cmd.register(sub)
 
     return parser
 
