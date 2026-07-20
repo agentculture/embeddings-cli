@@ -30,20 +30,31 @@ _VERBS = [
     "explain <path> — markdown docs for a topic",
     "overview — this descriptive snapshot",
     "doctor — check the agent-identity invariants",
+    "survey <corpus> — embed a corpus and write the atlas other verbs read",
+    "regions — cluster a surveyed atlas into semantic regions, with stability",
+    "neighbors <text|--id id> — k nearest atlas items by cosine distance",
+    "directions discover — discover candidate semantic directions and test them",
+    "directions overview — describe the directions noun and its sub-verbs",
+    "compare — compare two atlases' k-NN and rank agreement on a shared probe set",
+    "gaps — find corpus-coverage gaps, plus model-representation gaps via --probe",
+    "map — PCA-project an atlas to 2-D, optionally writing an HTML artifact",
 ]
 
-# The survey surface this project is being built toward. Listed separately from
-# _VERBS so an agent reading `overview` never mistakes a roadmap verb for a
-# callable one — none of these are registered on the parser yet.
-_PLANNED_VERBS = [
-    "survey <corpus> — embed a corpus and survey the resulting space",
-    "regions — identify semantic regions and clusters",
-    "neighbors <text> — inspect a neighborhood and its boundaries",
-    "directions — discover and test semantic directions",
-    "gaps — find weak, sparse, or uncertain coverage",
-    "compare <a> <b> — compare two models' geometry",
-    "map — render an interpretable map of the space",
-]
+# The survey surface this project was built toward is now fully implemented --
+# every verb once listed here (survey, regions, neighbors, directions, gaps,
+# compare, map) is registered on the parser and lives in _VERBS above.
+# _PLANNED_VERBS stays as an explicit empty list, rather than being deleted,
+# so agent_sections() can say so honestly instead of silently dropping the
+# section -- and so tests/test_roadmap_lockstep.py has something concrete to
+# assert against the real parser if a future roadmap item lands here.
+_PLANNED_VERBS: list[str] = []
+
+#: Shown in place of the (now empty) planned-verbs list, so the section never
+#: reads as a bare, unexplained heading with nothing under it.
+_NO_PLANNED_VERBS_NOTE = (
+    "none -- every verb once planned here (survey, regions, neighbors, "
+    "directions, gaps, compare, map) is now implemented; see Verbs above"
+)
 
 
 def agent_sections() -> list[dict[str, object]]:
@@ -60,7 +71,10 @@ def agent_sections() -> list[dict[str, object]]:
             ],
         },
         {"title": "Verbs", "items": list(_VERBS)},
-        {"title": "Planned verbs (not yet implemented)", "items": list(_PLANNED_VERBS)},
+        {
+            "title": "Planned verbs (not yet implemented)",
+            "items": list(_PLANNED_VERBS) or [_NO_PLANNED_VERBS_NOTE],
+        },
         {"title": "Sibling-pattern artifacts", "items": list(_ARTIFACTS)},
     ]
 

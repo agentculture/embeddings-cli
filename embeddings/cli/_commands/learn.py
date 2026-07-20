@@ -3,10 +3,15 @@
 Prints a structured self-teaching prompt. Must satisfy the agent-first rubric:
 >=200 chars and mention purpose, command map, exit codes, --json, and explain.
 
-The command map lists only what is implemented. The survey surface this project
-is being built toward (``survey``, ``regions``, ``neighbors``, ``directions``,
-``gaps``, ``compare``, ``map``) is named under "Planned" so an agent reading
-this never mistakes a roadmap verb for a callable one.
+The command map lists exactly what is implemented and callable today,
+including the full survey surface (``survey``, ``regions``, ``neighbors``,
+``directions``, ``gaps``, ``compare``, ``map``) alongside the identity and
+introspection verbs. Nothing on this CLI's roadmap remains unimplemented, so
+there is no separate "planned" list to keep apart from it -- but the
+``planned_commands`` key stays in the ``--json`` payload (empty) for schema
+stability, and ``tests/test_roadmap_lockstep.py`` asserts it against the real
+parser so a future addition can never drift back into naming an
+already-callable verb as merely planned.
 """
 
 from __future__ import annotations
@@ -45,16 +50,16 @@ Commands
   embeddings overview           Descriptive snapshot of the agent.
   embeddings doctor             Check the agent-identity invariants.
   embeddings cli overview       Describe the CLI surface itself.
+  embeddings survey <corpus>    Embed a corpus and write the atlas other verbs read.
+  embeddings regions            Cluster a surveyed atlas into semantic regions.
+  embeddings neighbors <text>   k nearest atlas items by cosine distance.
+  embeddings directions discover  Discover semantic directions and test them.
+  embeddings compare             Compare two atlases' k-NN and rank agreement.
+  embeddings gaps                Find corpus-coverage and model-representation gaps.
+  embeddings map                 Render a 2-D (PCA) map of a surveyed atlas.
 
-Planned (not yet implemented — calling these will fail)
--------------------------------------------------------
-  embeddings survey <corpus>    Embed a corpus and survey the resulting space.
-  embeddings regions            Identify semantic regions and clusters.
-  embeddings neighbors <text>   Inspect a neighborhood and its boundaries.
-  embeddings directions         Discover and test semantic directions.
-  embeddings gaps               Find weak, sparse, or uncertain coverage.
-  embeddings compare <a> <b>    Compare two models' geometry.
-  embeddings map                Render an interpretable map of the space.
+All commands above are implemented and callable today; nothing on this CLI's
+survey-surface roadmap remains planned.
 
 Machine-readable output
 -----------------------
@@ -87,16 +92,45 @@ def _as_json_payload() -> dict[str, object]:
             {"path": ["overview"], "summary": "Descriptive snapshot of the agent."},
             {"path": ["doctor"], "summary": "Check the agent-identity invariants."},
             {"path": ["cli", "overview"], "summary": "Describe the CLI surface."},
+            {
+                "path": ["survey"],
+                "summary": "Embed a corpus and write the atlas other verbs read.",
+            },
+            {
+                "path": ["regions"],
+                "summary": "Cluster a surveyed atlas into semantic regions, with stability.",
+            },
+            {
+                "path": ["neighbors"],
+                "summary": "k nearest atlas items to a text query or item id, by cosine distance.",
+            },
+            {
+                "path": ["directions", "discover"],
+                "summary": "Discover candidate semantic directions and test them held-out.",
+            },
+            {
+                "path": ["directions", "overview"],
+                "summary": "Describe the directions noun and its sub-verbs.",
+            },
+            {
+                "path": ["compare"],
+                "summary": "Compare two atlases' k-NN and rank agreement on a shared probe set.",
+            },
+            {
+                "path": ["gaps"],
+                "summary": "Find corpus-coverage gaps, plus model-representation gaps via --probe.",
+            },
+            {
+                "path": ["map"],
+                "summary": "PCA-project an atlas to 2-D, optionally writing an HTML artifact.",
+            },
         ],
-        "planned_commands": [
-            {"path": ["survey"], "summary": "Embed a corpus and survey the resulting space."},
-            {"path": ["regions"], "summary": "Identify semantic regions and clusters."},
-            {"path": ["neighbors"], "summary": "Inspect a neighborhood and its boundaries."},
-            {"path": ["directions"], "summary": "Discover and test semantic directions."},
-            {"path": ["gaps"], "summary": "Find weak, sparse, or uncertain coverage."},
-            {"path": ["compare"], "summary": "Compare two models' geometry."},
-            {"path": ["map"], "summary": "Render an interpretable map of the space."},
-        ],
+        # Nothing on this CLI's survey-surface roadmap remains planned -- every
+        # verb once listed here (survey, regions, neighbors, directions, gaps,
+        # compare, map) is now implemented above. The key stays for schema
+        # stability; tests/test_roadmap_lockstep.py asserts against the real
+        # parser that nothing here can ever name an already-callable verb.
+        "planned_commands": [],
         "exit_codes": {
             "0": "success",
             "1": "user-input error",

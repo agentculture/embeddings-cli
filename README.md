@@ -54,10 +54,10 @@ The goal is to understand the **geometry of meaning produced by the model**:
 
 ## Status
 
-The survey surface above is the **target design, not yet implemented**. What
-ships today is the agent-first CLI skeleton this project is built on — identity
-and introspection verbs (`whoami`, `learn`, `explain`, `overview`, `doctor`,
-`cli overview`), each with `--json`. See [CLI](#cli) for what actually runs.
+The survey surface above is **implemented and ships today**, alongside the
+agent-first CLI skeleton this project is built on — identity and introspection
+verbs (`whoami`, `learn`, `explain`, `overview`, `doctor`, `cli overview`),
+each with `--json`. See [CLI](#cli) for the full verb table.
 
 ## The Surveyor agent
 
@@ -140,9 +140,17 @@ Shipping today:
 | `overview` | Read-only descriptive snapshot of the agent. |
 | `doctor` | Check the agent-identity invariants (prompt-file-present, backend-consistency). |
 | `cli overview` | Describe the CLI surface itself. |
+| `survey <corpus>` | Embed a JSONL corpus and write the atlas other verbs read (dry-run by default; `--apply` commits). |
+| `regions` | Partition an atlas into semantic regions via k-means, with per-region stability. |
+| `neighbors <text\|--id id>` | k nearest atlas items by cosine distance, plus a neighborhood boundary profile. |
+| `directions discover` | Derive candidate semantic directions from item pairs and test them on held-out pairs. |
+| `directions overview` | Describe the `directions` noun and its sub-verbs. |
+| `compare` | Compare two atlases' k-NN overlap and rank agreement on a shared probe set — never by coordinates. |
+| `gaps` | Report corpus-coverage gaps, and (with `--probe`) what active probing shows about the model. |
+| `map` | PCA-project an atlas to 2-D; `--html` writes a self-contained map artifact. |
 
-Planned (the survey surface): `survey`, `regions`, `neighbors`, `directions`,
-`gaps`, `compare`, `map`.
+All originally planned survey-surface verbs are now implemented and listed
+above; nothing remains planned on this surface.
 
 Every command supports `--json`. Results go to stdout, errors/diagnostics to
 stderr (never mixed). Exit codes: `0` success, `1` user error, `2` environment
