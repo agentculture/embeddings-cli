@@ -13,7 +13,7 @@ classifiers = [
     "Topic :: Software Development",
     "Intended Audience :: Developers",
 ]
-dependencies = []
+dependencies = ["numpy>=2.0"]
 
 [project.urls]
 Homepage = "https://github.com/agentculture/embeddings-cli"
