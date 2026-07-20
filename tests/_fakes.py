@@ -43,13 +43,14 @@ resolves fixtures by name lookup in the importing test module's namespace, so
 from __future__ import annotations
 
 import hashlib
+import json
 import math
 import random
 import socket
 from collections.abc import Mapping, Sequence
 from contextlib import contextmanager
 from dataclasses import dataclass
-from typing import Iterator
+from typing import Any, Iterator
 
 import pytest
 
@@ -237,6 +238,36 @@ class UnreachableTransport:
     def __call__(self, texts: Sequence[str], model: str = "fake-embedding-model") -> dict:
         self.calls.append(FakeCall(texts=list(texts), model=model))
         raise self.error
+
+
+# --------------------------------------------------------------------------
+# Wire-level adapter -- plug a fake into the real EmbeddingClient
+# --------------------------------------------------------------------------
+
+
+def wire_transport(fake: FakeEmbeddingTransport | UnreachableTransport) -> Any:
+    """Adapt a text-level fake to the wire-level ``Transport`` protocol.
+
+    The fakes above speak the *semantic* contract (texts in, response dict
+    out), which is what makes them convenient to assert against.
+    :class:`embeddings.backends.client.EmbeddingClient` injects at the
+    *transport* layer instead -- ``(url, data: bytes, headers) -> bytes`` --
+    so the two do not compose directly. This bridges them: it decodes the
+    request body the client actually sends, replays it through the fake, and
+    re-encodes the response.
+
+    Use this whenever a test needs a real ``EmbeddingClient`` driven by a fake
+    backend. Without it, passing a fake straight to ``transport=`` raises
+    ``TypeError`` at call time.
+    """
+
+    def _transport(url: str, data: bytes, headers: dict[str, str]) -> bytes:
+        payload = json.loads(data.decode("utf-8"))
+        texts = payload.get("input", [])
+        model = payload.get("model", "fake-embedding-model")
+        return json.dumps(fake(texts, model)).encode("utf-8")
+
+    return _transport
 
 
 # --------------------------------------------------------------------------

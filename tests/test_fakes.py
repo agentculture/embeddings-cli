@@ -274,3 +274,45 @@ def test_dead_port_actually_refuses_a_real_connection() -> None:
             sock.connect((DEAD_HOST, DEAD_PORT))
     finally:
         sock.close()
+
+
+# --------------------------------------------------------------------------
+# wire_transport -- the fake must actually drive the real client
+# --------------------------------------------------------------------------
+
+
+def test_wire_transport_drives_the_real_embedding_client() -> None:
+    """A fake backend must compose with the real client, not just look like one.
+
+    The text-level fakes and the client's wire-level Transport protocol have
+    different signatures; `wire_transport` bridges them. This asserts the
+    bridge holds against the real EmbeddingClient, so a regression in either
+    signature fails here rather than in every verb test downstream.
+    """
+    from embeddings.backends.client import EmbeddingClient
+    from tests._fakes import FakeEmbeddingTransport, blocked_sockets, wire_transport
+
+    fake = FakeEmbeddingTransport(dim=8)
+    client = EmbeddingClient(transport=wire_transport(fake))
+
+    with blocked_sockets():
+        vectors = client.embed(["alpha", "beta"])
+
+    assert len(vectors) == 2
+    assert all(len(v) == 8 for v in vectors)
+    # Determinism survives the round trip through the wire format.
+    assert vectors[0] == pytest.approx(fake.vector_for("alpha"))
+    assert vectors[0] != vectors[1]
+
+
+def test_wire_transport_propagates_backend_failure() -> None:
+    """An unreachable fake backend must surface as the client's exit-2 CliError."""
+    from embeddings.backends.client import EmbeddingClient
+    from embeddings.cli._errors import CliError
+    from tests._fakes import UnreachableTransport, wire_transport
+
+    client = EmbeddingClient(transport=wire_transport(UnreachableTransport()))
+
+    with pytest.raises(CliError) as exc:
+        client.embed(["anything"])
+    assert exc.value.code == 2
