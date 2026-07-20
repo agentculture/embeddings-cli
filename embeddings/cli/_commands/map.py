@@ -37,7 +37,9 @@ The artifact carries its own provenance
 ----------------------------------------
 ``--html`` writes a single self-contained file. It embeds the atlas path, model,
 endpoint, algorithm, every parameter, the seed, the item count, the per-axis
-explained variance, and :data:`PROJECTION_CAVEAT` in plain prose — because the
+explained variance, :data:`PROJECTION_CAVEAT` in plain prose, and — via
+:func:`embeddings.cli._provenance.reproducing_command` — the literal
+``embeddings map ...`` invocation that produced this exact file, because the
 one thing certain about a scatter plot is that it will be screenshotted and
 shared without the command that made it. Provenance stapled to the command line
 is provenance that does not travel; provenance inside the file does.
@@ -80,6 +82,11 @@ from embeddings.cli._commands.regions import (
 )
 from embeddings.cli._errors import EXIT_ENV_ERROR, EXIT_USER_ERROR, CliError
 from embeddings.cli._output import emit_diagnostic, emit_result
+from embeddings.cli._provenance import (
+    REPRODUCED_BY_KEY,
+    reproduce_line,
+    reproducing_command,
+)
 from embeddings.measure import StabilityResult, measure_stability
 from embeddings.measure.stability import DEFAULT_RESAMPLES, DEFAULT_RUNS
 
@@ -376,6 +383,7 @@ def build_payload(args: argparse.Namespace) -> dict:
         "caveat": PROJECTION_CAVEAT,
         "uncertain": uncertain,
         "html": None,
+        REPRODUCED_BY_KEY: reproducing_command(),
     }
 
 
@@ -496,6 +504,7 @@ def _provenance(payload: dict) -> str:
         ("Stability runs", f"{params['runs']} seed rerun(s), {params['resamples']} resample(s)"),
         ("Sign convention", params["sign_convention"]),
         ("Aspect", params["aspect"]),
+        ("Reproduce", payload[REPRODUCED_BY_KEY]),
     ]
     return "\n".join(
         f"<div class='row'><dt>{_escape(term)}</dt><dd>{_escape(value)}</dd></div>"
@@ -609,6 +618,8 @@ def _render_text(payload: dict) -> str:
     lines.append("")
     lines.append("uncertain (belongs in the atlas manifest's uncertain[]):")
     lines += [f"- {entry}" for entry in payload["uncertain"]]
+    lines.append("")
+    lines.append(reproduce_line(payload[REPRODUCED_BY_KEY]))
     return "\n".join(lines)
 
 

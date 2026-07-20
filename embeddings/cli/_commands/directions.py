@@ -74,6 +74,11 @@ from embeddings.cli._commands._atlas_arg import add_atlas_argument, load_atlas, 
 from embeddings.cli._commands.overview import emit_overview
 from embeddings.cli._errors import EXIT_USER_ERROR, CliError
 from embeddings.cli._output import emit_result
+from embeddings.cli._provenance import (
+    REPRODUCED_BY_KEY,
+    reproduce_line,
+    reproducing_command,
+)
 from embeddings.measure import StabilityResult, measure_stability
 from embeddings.measure.stability import DEFAULT_RESAMPLES, DEFAULT_RUNS
 
@@ -462,6 +467,7 @@ def _render(payload: dict[str, object]) -> str:
         lines += [f"- {note}" for note in payload["uncertain"]]
     lines += ["", "limitations:"]
     lines += [f"- {note}" for note in payload["limitations"]]
+    lines += ["", reproduce_line(payload[REPRODUCED_BY_KEY])]
     return "\n".join(lines)
 
 
@@ -556,6 +562,7 @@ def cmd_discover(args: argparse.Namespace) -> int:
         "not_generalizing": len(candidates) - generalizing,
         "uncertain": uncertain,
         "limitations": [_FRAMING_LIMITATION, _PAIR_SET_LIMITATION, *atlas.manifest.limitations],
+        REPRODUCED_BY_KEY: reproducing_command(),
     }
     emit_result(payload if json_mode else _render(payload), json_mode=json_mode)
     return 0

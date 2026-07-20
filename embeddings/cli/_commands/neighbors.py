@@ -85,6 +85,11 @@ from embeddings.backends.client import MODEL_FLAG, MODEL_HELP
 from embeddings.cli._commands._atlas_arg import add_atlas_argument, load_atlas, resolve_atlas_path
 from embeddings.cli._errors import EXIT_USER_ERROR, CliError
 from embeddings.cli._output import emit_result
+from embeddings.cli._provenance import (
+    REPRODUCED_BY_KEY,
+    reproduce_line,
+    reproducing_command,
+)
 
 #: The one distance metric this verb ever computes or reports. Stated as a
 #: module constant, never derived or switched at runtime, so "cosine" in the
@@ -271,6 +276,8 @@ def _render_text(payload: dict[str, object]) -> str:
     boundary = payload["boundary"]
     if isinstance(boundary, dict):
         lines.append(f"boundary: {boundary['note']}")
+    lines.append("")
+    lines.append(reproduce_line(payload[REPRODUCED_BY_KEY]))
     return "\n".join(lines)
 
 
@@ -325,6 +332,7 @@ def cmd_neighbors(args: argparse.Namespace) -> int:
             "endpoint": endpoint_used,
         },
         "seed": int(args.seed),
+        REPRODUCED_BY_KEY: reproducing_command(),
     }
 
     emit_result(payload if json_mode else _render_text(payload), json_mode=json_mode)
