@@ -1,7 +1,12 @@
-"""``embeddings-cli learn`` — the learnability affordance.
+"""``embeddings learn`` — the learnability affordance.
 
 Prints a structured self-teaching prompt. Must satisfy the agent-first rubric:
 >=200 chars and mention purpose, command map, exit codes, --json, and explain.
+
+The command map lists only what is implemented. The survey surface this project
+is being built toward (``survey``, ``regions``, ``neighbors``, ``directions``,
+``gaps``, ``compare``, ``map``) is named under "Planned" so an agent reading
+this never mistakes a roadmap verb for a callable one.
 """
 
 from __future__ import annotations
@@ -11,24 +16,45 @@ import argparse
 from embeddings import __version__
 from embeddings.cli._output import emit_result
 
+_PURPOSE = (
+    "Study embedding spaces as systems — the geometry of meaning a model "
+    "produces — rather than querying individual vectors."
+)
+
 _TEXT = """\
-embeddings-cli — a clonable template for AgentCulture mesh agents.
+embeddings-cli — study embedding spaces as systems, not individual vectors.
 
 Purpose
 -------
-Scaffold for a new Culture mesh agent: an agent-first CLI (cited from the teken
-`python-cli` reference), an identity (culture.yaml + CLAUDE.md), the canonical
-guildmaster skill kit under .claude/skills/, and a deploy/CI baseline. Clone it,
-rename the package, and edit culture.yaml to mint a new agent.
+An individual embedding is hard to interpret; its dimensions rarely map to clean
+human concepts. An embedding space, though, has structure worth measuring:
+semantic regions, neighborhoods and boundaries, recurring directions of meaning,
+dense and sparse areas, gaps in coverage, and differences between models. This
+tool treats an embedding model as a semantic landscape and asks what kind of
+world the model creates — not just which documents sit closest to a query.
+
+It also serves as the deterministic tool surface for a Surveyor agent, which
+runs measured experiments against the space and records an evidence-backed
+Atlas: the interpretation, plus the measurements that make it inspectable.
 
 Commands
 --------
-  embeddings-cli whoami             Identity from culture.yaml.
-  embeddings-cli learn              This self-teaching prompt.
-  embeddings-cli explain <path>...  Markdown docs for any noun/verb path.
-  embeddings-cli overview           Descriptive snapshot of the agent.
-  embeddings-cli doctor             Check the agent-identity invariants.
-  embeddings-cli cli overview       Describe the CLI surface itself.
+  embeddings whoami             Identity from culture.yaml.
+  embeddings learn              This self-teaching prompt.
+  embeddings explain <path>...  Markdown docs for any noun/verb path.
+  embeddings overview           Descriptive snapshot of the agent.
+  embeddings doctor             Check the agent-identity invariants.
+  embeddings cli overview       Describe the CLI surface itself.
+
+Planned (not yet implemented — calling these will fail)
+-------------------------------------------------------
+  embeddings survey <corpus>    Embed a corpus and survey the resulting space.
+  embeddings regions            Identify semantic regions and clusters.
+  embeddings neighbors <text>   Inspect a neighborhood and its boundaries.
+  embeddings directions         Discover and test semantic directions.
+  embeddings gaps               Find weak, sparse, or uncertain coverage.
+  embeddings compare <a> <b>    Compare two models' geometry.
+  embeddings map                Render an interpretable map of the space.
 
 Machine-readable output
 -----------------------
@@ -44,15 +70,16 @@ Exit-code policy
 
 More detail
 -----------
-  embeddings-cli explain embeddings-cli
+  embeddings explain embeddings-cli
 """
 
 
 def _as_json_payload() -> dict[str, object]:
     return {
         "tool": "embeddings-cli",
+        "command": "embeddings",
         "version": __version__,
-        "purpose": "Clonable scaffold for a new AgentCulture mesh agent.",
+        "purpose": _PURPOSE,
         "commands": [
             {"path": ["whoami"], "summary": "Identity probe from culture.yaml."},
             {"path": ["learn"], "summary": "Self-teaching prompt."},
@@ -61,13 +88,22 @@ def _as_json_payload() -> dict[str, object]:
             {"path": ["doctor"], "summary": "Check the agent-identity invariants."},
             {"path": ["cli", "overview"], "summary": "Describe the CLI surface."},
         ],
+        "planned_commands": [
+            {"path": ["survey"], "summary": "Embed a corpus and survey the resulting space."},
+            {"path": ["regions"], "summary": "Identify semantic regions and clusters."},
+            {"path": ["neighbors"], "summary": "Inspect a neighborhood and its boundaries."},
+            {"path": ["directions"], "summary": "Discover and test semantic directions."},
+            {"path": ["gaps"], "summary": "Find weak, sparse, or uncertain coverage."},
+            {"path": ["compare"], "summary": "Compare two models' geometry."},
+            {"path": ["map"], "summary": "Render an interpretable map of the space."},
+        ],
         "exit_codes": {
             "0": "success",
             "1": "user-input error",
             "2": "environment/setup error",
         },
         "json_support": True,
-        "explain_pointer": "embeddings-cli explain <path>",
+        "explain_pointer": "embeddings explain <path>",
     }
 
 
