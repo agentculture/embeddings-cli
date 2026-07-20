@@ -242,3 +242,6 @@ skills.local.yaml
 # regenerable via `embeddings survey ... --apply` (from the embed cache, or a
 # live re-embed), so they never enter git. See embeddings/atlas/io.py.
 *.npy
+
+# Ephemeral subagent worktrees (Agent tool isolation) — never committed
+.claude/worktrees/
