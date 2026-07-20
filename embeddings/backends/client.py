@@ -53,8 +53,16 @@ from urllib.parse import urlparse
 
 from embeddings.cli._errors import EXIT_ENV_ERROR, CliError
 
-#: Built-in default endpoint: the local model-gear `lobes` gateway.
-DEFAULT_BASE_URL = "http://localhost:8002/v1"
+#: Built-in default endpoint: the local model-gear ``lobes`` gateway.
+#:
+#: The authoritative resolver for this value is ``lobes endpoint embedder``,
+#: NOT documentation. An earlier default of ``:8002`` came from the build brief
+#: and from eidetic-cli's README/skills, which had drifted from reality (and
+#: from eidetic's own code default of ``:8101``); the gateway container
+#: publishes host port 8001. When this looks wrong, ask the tool:
+#:
+#:     lobes endpoint embedder --json
+DEFAULT_BASE_URL = "http://localhost:8001/v1"
 #: Built-in default model served by the gateway above.
 DEFAULT_MODEL = "Qwen/Qwen3-Embedding-0.6B"
 
@@ -62,6 +70,12 @@ DEFAULT_MODEL = "Qwen/Qwen3-Embedding-0.6B"
 ENV_BASE_URL = "EMBEDDINGS_EMBED_URL"
 #: Environment variable that overrides the model name.
 ENV_MODEL = "EMBEDDINGS_EMBED_MODEL"
+#: Environment variables consulted, in order, for the gateway bearer token.
+#: The gateway rejects unauthenticated requests, so this is required in
+#: practice; it is read from the environment only — never a flag, so the
+#: secret cannot land in shell history, a process list, or a help string.
+ENV_API_KEY = "EMBEDDINGS_API_KEY"
+ENV_API_KEY_FALLBACK = "COLLEAGUE_API_KEY"
 
 #: Flag name a CLI verb should register for the base-URL override; referenced
 #: in error hints and in :data:`ENDPOINT_HELP` so the flag, the hint, and the
@@ -128,10 +142,41 @@ def _default_model() -> str:
     return os.environ.get(ENV_MODEL, DEFAULT_MODEL)
 
 
+def _default_api_key() -> str | None:
+    """Resolve the gateway bearer token from the environment, or ``None``.
+
+    Environment only, by design: a token passed as a CLI flag would be visible
+    in shell history and in every process listing on the box.
+    """
+    for name in (ENV_API_KEY, ENV_API_KEY_FALLBACK):
+        value = os.environ.get(name)
+        if value:
+            return value
+    return None
+
+
 def _override_hint(base_url: str) -> str:
     return (
-        f"start the embedding gateway at {base_url}, or point elsewhere with "
+        f"start the embedding gateway at {base_url} (resolve the real one with "
+        f"'lobes endpoint embedder'), or point elsewhere with "
         f"{ENDPOINT_FLAG} / the {ENV_BASE_URL} environment variable"
+    )
+
+
+def _looks_like_auth_failure(err: Exception) -> bool:
+    """True when a transport failure was the gateway refusing credentials.
+
+    Checked structurally via ``HTTPError.code`` where available, so the
+    classification does not depend on the wording of an error message.
+    """
+    code = getattr(err, "code", None)
+    return code in (401, 403)
+
+
+def _auth_hint() -> str:
+    return (
+        f"the gateway rejected the credentials; set {ENV_API_KEY} (or "
+        f"{ENV_API_KEY_FALLBACK}) in the environment to a valid gateway key"
     )
 
 
@@ -149,6 +194,10 @@ class EmbeddingClient:
     base_url: str = field(default_factory=_default_base_url)
     model: str = field(default_factory=_default_model)
     transport: Transport = urllib_transport
+    #: Bearer token for the gateway, resolved from the environment. Never
+    #: rendered: :meth:`__repr__` is suppressed for this field so the secret
+    #: cannot leak through a traceback, a log line, or a debugger dump.
+    api_key: str | None = field(default_factory=_default_api_key, repr=False)
 
     def __post_init__(self) -> None:
         self.base_url = self.base_url.rstrip("/")
@@ -168,10 +217,21 @@ class EmbeddingClient:
         endpoint = self.endpoint
         payload = json.dumps({"model": self.model, "input": list(texts)}).encode("utf-8")
         headers = {"Content-Type": "application/json"}
+        if self.api_key:
+            headers["Authorization"] = f"Bearer {self.api_key}"
 
         try:
             raw = self.transport(endpoint, payload, headers)
         except Exception as err:  # noqa: BLE001 - every transport failure becomes a CliError
+            # An auth rejection is a *different* operator fix than an
+            # unreachable host, so it gets its own hint rather than being
+            # reported as "the gateway is down".
+            if _looks_like_auth_failure(err):
+                raise CliError(
+                    code=EXIT_ENV_ERROR,
+                    message=f"embedding backend at {endpoint} rejected the request: {err}",
+                    remediation=_auth_hint(),
+                ) from err
             raise CliError(
                 code=EXIT_ENV_ERROR,
                 message=f"embedding backend unreachable at {endpoint}: {err}",

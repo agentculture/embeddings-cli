@@ -20,6 +20,7 @@ from urllib.parse import urlparse
 
 import pytest
 
+from embeddings.backends import client
 from embeddings.backends.client import (
     DEFAULT_BASE_URL,
     DEFAULT_MODEL,
@@ -97,7 +98,7 @@ def test_defaults_are_the_lobes_gateway() -> None:
     client = EmbeddingClient(transport=_RecordingTransport(_ok_response(0)))
     assert client.base_url == DEFAULT_BASE_URL
     assert client.model == DEFAULT_MODEL
-    assert DEFAULT_BASE_URL == "http://localhost:8002/v1"
+    assert DEFAULT_BASE_URL == "http://localhost:8001/v1"
     assert DEFAULT_MODEL == "Qwen/Qwen3-Embedding-0.6B"
 
 
@@ -339,3 +340,74 @@ def test_endpoint_help_text_states_off_machine_implication() -> None:
     assert DEFAULT_BASE_URL in ENDPOINT_HELP
     assert ENV_BASE_URL in ENDPOINT_HELP
     assert isinstance(ENDPOINT_FLAG, str) and ENDPOINT_FLAG.startswith("--")
+
+
+# --------------------------------------------------------------------------
+# Gateway authentication
+#
+# The real lobes gateway rejects unauthenticated requests. These guard both
+# halves: the token must reach the wire, and it must never reach anything a
+# human or a log file reads.
+# --------------------------------------------------------------------------
+
+
+def test_api_key_is_sent_as_a_bearer_header(monkeypatch) -> None:
+    monkeypatch.setenv(client.ENV_API_KEY, "secret-token-value")
+    seen: dict[str, dict[str, str]] = {}
+
+    def _capture(url: str, data: bytes, headers: dict[str, str]) -> bytes:
+        seen["headers"] = dict(headers)
+        return json.dumps({"data": [{"embedding": [0.0, 1.0]}]}).encode("utf-8")
+
+    client.EmbeddingClient(transport=_capture).embed(["x"])
+    assert seen["headers"]["Authorization"] == "Bearer secret-token-value"
+
+
+def test_no_authorization_header_when_no_key_is_configured(monkeypatch) -> None:
+    monkeypatch.delenv(client.ENV_API_KEY, raising=False)
+    monkeypatch.delenv(client.ENV_API_KEY_FALLBACK, raising=False)
+    seen: dict[str, dict[str, str]] = {}
+
+    def _capture(url: str, data: bytes, headers: dict[str, str]) -> bytes:
+        seen["headers"] = dict(headers)
+        return json.dumps({"data": [{"embedding": [0.0]}]}).encode("utf-8")
+
+    client.EmbeddingClient(transport=_capture).embed(["x"])
+    assert "Authorization" not in seen["headers"]
+
+
+def test_fallback_env_var_supplies_the_key(monkeypatch) -> None:
+    monkeypatch.delenv(client.ENV_API_KEY, raising=False)
+    monkeypatch.setenv(client.ENV_API_KEY_FALLBACK, "fallback-token")
+    assert client.EmbeddingClient(transport=lambda u, d, h: b"{}").api_key == "fallback-token"
+
+
+def test_the_key_never_appears_in_a_repr(monkeypatch) -> None:
+    """A traceback or debug dump must not disclose the gateway token."""
+    monkeypatch.setenv(client.ENV_API_KEY, "super-secret-do-not-print")
+    rendered = repr(client.EmbeddingClient(transport=lambda u, d, h: b"{}"))
+    assert "super-secret-do-not-print" not in rendered
+
+
+def test_auth_rejection_is_distinguishable_from_an_unreachable_gateway() -> None:
+    """401/403 needs a different operator fix than a dead host — say which."""
+    import urllib.error
+
+    def _reject(url: str, data: bytes, headers: dict[str, str]) -> bytes:
+        raise urllib.error.HTTPError(url, 401, "Unauthorized", {}, None)
+
+    with pytest.raises(CliError) as exc:
+        client.EmbeddingClient(transport=_reject).embed(["x"])
+    assert exc.value.code == 2
+    assert "rejected" in exc.value.message
+    assert client.ENV_API_KEY in exc.value.remediation
+
+
+def test_default_base_url_matches_the_lobes_gateway_port() -> None:
+    """Guards the drift that cost this project a wrong assumption.
+
+    The authoritative resolver is `lobes endpoint embedder`; several docs in
+    the mesh still claim :8002 (and eidetic's own code says :8101). Pin the
+    value so a silent revert to a documented-but-wrong port fails here.
+    """
+    assert client.DEFAULT_BASE_URL == "http://localhost:8001/v1"

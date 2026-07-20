@@ -56,7 +56,7 @@ import pytest
 
 # --------------------------------------------------------------------------
 # Reserved dead port — for tests that must prove an *unreachable* endpoint is
-# handled without a traceback. Deliberately NOT 8002 (the real lobes gateway
+# handled without a traceback. Deliberately NOT 8001 (the real lobes gateway
 # port defaulted to by embeddings/backends/client.py) so a copy-paste mistake
 # can never accidentally target a real, possibly-running service.
 # --------------------------------------------------------------------------
