@@ -1,0 +1,742 @@
+{
+  "slug": "embeddings-survey-surface",
+  "title": "embeddings survey surface",
+  "frame_slug": "embeddings-survey-surface",
+  "schema_version": 3,
+  "status": "exported",
+  "created": "2026-07-20T12:57:49Z",
+  "updated": "2026-07-20T13:37:36Z",
+  "targets": [
+    {
+      "id": "c1",
+      "kind": "announcement",
+      "text": "embeddings-cli ships its survey surface: 'embeddings survey' embeds a corpus through an OpenAI-compatible backend (defaulting to the local model-gear embed gear) into a persisted, typed Atlas with first-class limitations, and 'regions', 'neighbors', 'directions', 'gaps', 'compare', and 'map' read measured, reproducible, parameter-and-seed-stamped evidence back out of it."
+    },
+    {
+      "id": "h1",
+      "kind": "honesty",
+      "text": "the seven verbs exist, are callable, and each produces measured output from a real corpus through the lobes gateway \u2014 demonstrated end-to-end by the first study"
+    },
+    {
+      "id": "c2",
+      "kind": "requirement",
+      "text": "New verbs register as modules under embeddings/cli/_commands/ via register(sub) at the marked spot in _build_parser(); handlers raise CliError only (dispatch wraps everything else), and every sub-verb declares its own --json since argparse does not inherit the parent flag."
+    },
+    {
+      "id": "h2",
+      "kind": "honesty",
+      "text": "teken cli doctor --strict stays green after each new verb registers, and a parse error inside any new verb still renders error:/hint: with exit 1"
+    },
+    {
+      "id": "c3",
+      "kind": "requirement",
+      "text": "'directions discover' makes directions a noun with action-verbs, so the group must also expose 'directions overview', copying cli.py including parser_class=type(p) on add_subparsers so nested parse errors keep the structured error contract."
+    },
+    {
+      "id": "h3",
+      "kind": "honesty",
+      "text": "'embeddings directions' with no sub-verb prints the noun overview and exits 0, and 'directions overview --json' returns the sections payload \u2014 same shape tests as cli overview"
+    },
+    {
+      "id": "c4",
+      "kind": "requirement",
+      "text": "Each verb that ships moves from planned to implemented in all four surfaces that list the roadmap \u2014 learn.py (_TEXT and planned_commands), overview.py (_PLANNED_VERBS), explain/catalog.py (plus a new self-contained entry per verb), and README.md \u2014 the planned/implemented separation is load-bearing for agent readers."
+    },
+    {
+      "id": "h4",
+      "kind": "honesty",
+      "text": "after each verb ships, learn --json lists it under commands and not planned_commands, and explain resolves its path \u2014 asserted by a test that checks the two lists against the registered parser"
+    },
+    {
+      "id": "c5",
+      "kind": "requirement",
+      "text": "The first runtime dependency lands: pyproject dependencies=[] today and numpy is the floor for clustering/directions/density; nothing in CI enforces zero-deps (teken cli doctor --strict checks CLI shape, not dependencies), and publish.yml is path-filtered to pyproject.toml and embeddings/** so the dep change also rides the PyPI publish path on merge."
+    },
+    {
+      "id": "h5",
+      "kind": "honesty",
+      "text": "the first survey-surface PR adds numpy (only) to [project.dependencies], uv sync and CI pass, and the TestPyPI dry-run publish succeeds with the dependency present"
+    },
+    {
+      "id": "c7",
+      "kind": "requirement",
+      "text": "An unreachable embed backend is an environment failure: CliError code 2 with a remediation naming the endpoint and how to start or override the gear \u2014 the gear is down on this machine right now, so backend-down is the day-one failure path, and no traceback may leak."
+    },
+    {
+      "id": "h6",
+      "kind": "honesty",
+      "text": "with nothing listening on the configured endpoint, every embedding-touching verb exits 2 with error: naming the endpoint and hint: naming the override \u2014 covered by a test pointing the backend at a dead port"
+    },
+    {
+      "id": "c8",
+      "kind": "requirement",
+      "text": "The Atlas is a persisted, typed artifact with first-class limitations/uncertain sections (issue AC-4): survey writes it and regions/neighbors/directions/gaps/compare/map read it; nothing in the package writes to disk today, so format and location are greenfield."
+    },
+    {
+      "id": "h7",
+      "kind": "honesty",
+      "text": "the Atlas round-trips: survey writes it, a reader verb loads it and reproduces the written measurements identically; limitations and uncertain are required schema fields a test asserts non-optional"
+    },
+    {
+      "id": "c9",
+      "kind": "requirement",
+      "text": "A design note lands in docs/ answering issue unknowns 1-3 (gaps semantics, cross-model comparison method, projection/cluster stability) before the corresponding verbs are implemented (issue AC-3)."
+    },
+    {
+      "id": "h8",
+      "kind": "honesty",
+      "text": "docs/ contains the design note answering gaps semantics, compare method, and stability policy, merged no later than the PR implementing the first of gaps/compare/regions"
+    },
+    {
+      "id": "c10",
+      "kind": "requirement",
+      "text": "Every write verb is dry-run by default with --apply to commit (issue AC-5, AgentCulture rule \u2014 agents call CLIs in loops); survey, the primary writer, previews corpus size and backend without --apply."
+    },
+    {
+      "id": "h9",
+      "kind": "honesty",
+      "text": "a test runs survey without --apply and asserts zero filesystem writes; with --apply it asserts the Atlas exists"
+    },
+    {
+      "id": "c11",
+      "kind": "requirement",
+      "text": "Every measurement output records its parameters and seed, and structural claims (a region, a direction, a gap) carry a stability measure rather than being reported as fact \u2014 UMAP/t-SNE layouts and k-means/HDBSCAN partitions shift substantially with parameters and seeds (issue unknown 3)."
+    },
+    {
+      "id": "h10",
+      "kind": "honesty",
+      "text": "every structural verb's --json output carries params and seed keys, and re-running with identical inputs and seed produces identical output \u2014 asserted by test"
+    },
+    {
+      "id": "c12",
+      "kind": "requirement",
+      "text": "New verbs ship with tests including --json shape tests in the pattern of test_cli_introspection.py, and keep coverage above the fail_under=60 gate CI enforces via pytest --cov."
+    },
+    {
+      "id": "h11",
+      "kind": "honesty",
+      "text": "coverage stays at or above 60 and the full CI matrix (tests, lint, rubric gate, version-check) is green on every survey-surface PR"
+    },
+    {
+      "id": "c15",
+      "kind": "boundary",
+      "text": "_errors.py, _output.py, and cli/__init__.py are stable-contract: the survey surface extends them, never alters their semantics \u2014 results to stdout, errors/diagnostics to stderr with the hint: prefix, exit codes 0/1/2 with 3+ reserved, no traceback ever."
+    },
+    {
+      "id": "h12",
+      "kind": "honesty",
+      "text": "no survey-surface PR alters _errors.py/_output.py semantics \u2014 the existing introspection test suite (structured error shape, stdout/stderr split) passes unchanged throughout"
+    },
+    {
+      "id": "c20",
+      "kind": "boundary",
+      "text": "Acceptance criteria 1 and 2 are already satisfied on disk and must not be re-opened: CLAUDE.md was retargeted to the real domain in 0.7.0 (commit be4f6e8) and backend colleague is consistent \u2014 AGENTS.colleague.md present, doctor reports healthy true. Remaining criteria are 3-6."
+    },
+    {
+      "id": "h13",
+      "kind": "honesty",
+      "text": "doctor stays healthy across the work; CLAUDE.md and the prompt files change only additively (the Surveyor retarget), never re-scaffolded"
+    },
+    {
+      "id": "c22",
+      "kind": "audience",
+      "text": "The Surveyor agent (the colleague resident this repo declares), the operator driving studies, and agent readers of learn/explain \u2014 plus sibling lanes (eidetic-cli) consuming study results."
+    },
+    {
+      "id": "h14",
+      "kind": "honesty",
+      "text": "learn/explain stay self-teaching for an agent reader (rubric-gated), and the Surveyor prompt can drive the CLI without out-of-band knowledge"
+    },
+    {
+      "id": "c23",
+      "kind": "after_state",
+      "text": "An operator or the Surveyor agent runs 'embeddings survey corpus.jsonl' against the lobes gateway and gets a persisted Atlas; regions, neighbors, directions, gaps, compare, and map read measured evidence back out of it; every structural output is parameter-and-seed-stamped, supports --json, and cites the command that reproduces it."
+    },
+    {
+      "id": "h15",
+      "kind": "honesty",
+      "text": "the end-to-end path works on this machine: survey a corpus through the lobes gateway, then each reader verb returns measured output from the persisted Atlas"
+    },
+    {
+      "id": "c24",
+      "kind": "before_state",
+      "text": "Today the CLI is the renamed template skeleton: six introspection verbs, no corpus/embedding/survey code, no disk persistence, dependencies=[] \u2014 the seven survey verbs exist only as planned-verb listings."
+    },
+    {
+      "id": "h16",
+      "kind": "honesty",
+      "text": "verified during scoping at commit be4f6e8: no corpus/embedding/survey code, no disk writes, dependencies=[]"
+    },
+    {
+      "id": "c25",
+      "kind": "why_it_matters",
+      "text": "Embedding models get picked on retrieval benchmarks and hidden behind vector databases as interchangeable infrastructure; they are not \u2014 each defines its own system of similarity and distinction. This CLI makes those differences visible, measurable, and reproducible."
+    },
+    {
+      "id": "h17",
+      "kind": "honesty",
+      "text": "the first study (the eidetic-embedder Atlas) demonstrates at least one model-specific finding a retrieval benchmark alone would not surface"
+    },
+    {
+      "id": "c26",
+      "kind": "success_signal",
+      "text": "The first real study ships: an Atlas of the eidetic recall embedder (Qwen3-Embedding-0.6B via the lobes gateway) answering whether it distinguishes what recall needs distinguished \u2014 every claim in it traceable to a re-runnable embeddings command."
+    },
+    {
+      "id": "h18",
+      "kind": "honesty",
+      "text": "the eidetic-embedder Atlas is committed with every structural claim carrying its reproducing command, params, seed, and stability measure"
+    },
+    {
+      "id": "c33",
+      "kind": "requirement",
+      "text": "Refines decision c30: the committable Atlas is the interpretation, not the bulk \u2014 atlas.json manifest, JSONL records, and measurements are committed; .npy vector sidecars are regenerable bulk (cache- or backend-rebuildable via survey --apply) and are excluded from git by a shipped .gitignore entry. A 10k-item corpus at 1024 dims is ~40MB of float32 per model \u2014 committing vectors would bloat the repo and contradict the Atlas-is-not-the-space distinction the issue marks load-bearing."
+    },
+    {
+      "id": "h20",
+      "kind": "honesty",
+      "text": "after a default survey --apply inside a repo, git status shows no .npy files; reader verbs still work locally from the sidecars; the committed subset alone lets a reviewer audit every structural claim"
+    },
+    {
+      "id": "c34",
+      "kind": "requirement",
+      "text": "All disk writes are atomic (write-temp-then-rename): the atlas directory materializes only complete, and each embed-cache entry is written atomically \u2014 a killed survey never leaves a half-written atlas or a corrupt cache entry, and concurrent surveys racing on the content-addressed cache are benign (same key, same content). survey batches gateway requests with a configurable batch size, retries transient failures, and emits progress diagnostics to stderr so looping agents see liveness."
+    },
+    {
+      "id": "h21",
+      "kind": "honesty",
+      "text": "a survey interrupted mid-run leaves no partial atlas dir and no unreadable cache entry \u2014 asserted by a test that simulates interruption between batches"
+    },
+    {
+      "id": "c35",
+      "kind": "requirement",
+      "text": "survey --apply refuses to overwrite an existing atlas at the target path: exit 1 with a hint naming --force; only --force replaces it (atomically). Prior committed study evidence is user data \u2014 silent clobbering by an agent in a loop is the data-loss path the c19 escalation named."
+    },
+    {
+      "id": "h22",
+      "kind": "honesty",
+      "text": "survey --apply onto an existing atlas exits 1 with a hint naming --force; with --force the old atlas is replaced whole, never merged \u2014 asserted by test"
+    },
+    {
+      "id": "c36",
+      "kind": "requirement",
+      "text": "The atlas.json manifest's schema_version is fail-closed: a reader verb pointed at an atlas with an unknown or newer schema_version exits 2 with a hint naming the version mismatch and the CLI version that wrote it \u2014 it never best-effort-parses. Old CLIs meeting new atlases is the lifecycle path the frame had no claim for."
+    },
+    {
+      "id": "h23",
+      "kind": "honesty",
+      "text": "a reader on an atlas with schema_version bumped beyond supported exits 2 with the mismatch hint \u2014 asserted by test"
+    },
+    {
+      "id": "c37",
+      "kind": "boundary",
+      "text": "Determinism claims are scoped: byte-identical reproducibility (h10) is guaranteed for reader verbs over a fixed Atlas and for cache-served vectors; a fresh re-embedding of the same text may vary at float precision (GPU/vLLM nondeterminism), so survey-level reproducibility is cache-scoped, and the Atlas limitations[] section states this automatically."
+    },
+    {
+      "id": "h24",
+      "kind": "honesty",
+      "text": "the design note documents the determinism scope; every atlas written from live (non-cached) embeddings carries the float-variance limitation entry; reader-verb byte-identity is asserted by test"
+    },
+    {
+      "id": "c38",
+      "kind": "requirement",
+      "text": "The test suite is hermetic: CI has no lobes gateway, so no test may open a real socket to the embedding endpoint \u2014 the backend is faked via an injected transport/stub, and the dead-port failure test (h6) uses a reserved local port. The live end-to-end run (h15) is operator-machine evidence, recorded in the first study, not a CI assertion."
+    },
+    {
+      "id": "h25",
+      "kind": "honesty",
+      "text": "the full pytest suite passes on a machine with nothing listening on any embedding endpoint \u2014 verified by CI itself on every PR"
+    },
+    {
+      "id": "c39",
+      "kind": "requirement",
+      "text": "A reader verb with no atlas at the resolved path is a user error: exit 1 with hint 'run embeddings survey <corpus> --apply first, or pass --atlas <path>' \u2014 distinct from exit 2 (gateway down), so an agent can tell 'nothing surveyed yet' from 'environment broken'."
+    },
+    {
+      "id": "h26",
+      "kind": "honesty",
+      "text": "each reader verb run without an atlas exits 1 with the survey-first hint; the same verb with the gateway down but an atlas present succeeds (readers never need the gateway) \u2014 both asserted by test"
+    },
+    {
+      "id": "c40",
+      "kind": "boundary",
+      "text": "Network egress is exactly one host: corpus text is sent only to the explicitly configured embeddings endpoint (default localhost lobes gateway); no telemetry, no other requests. Pointing at a remote provider is an explicit operator choice that ships corpus content off-machine \u2014 the help text for the endpoint flag says so."
+    },
+    {
+      "id": "h27",
+      "kind": "honesty",
+      "text": "code review + a test over the HTTP layer confirm the only outbound host is the configured endpoint; the endpoint flag's help text names the off-machine implication"
+    }
+  ],
+  "tasks": [
+    {
+      "id": "t1",
+      "summary": "Add numpy as the first runtime dependency in pyproject.toml",
+      "origin": "llm",
+      "status": "confirmed",
+      "acceptance_criteria": [
+        "[project.dependencies] lists numpy and nothing else; uv sync succeeds and uv.lock updates",
+        "the full CI matrix passes with the dependency present, including the TestPyPI dry-run publish on the PR"
+      ],
+      "deps": [],
+      "covers": [
+        "c5",
+        "h5"
+      ],
+      "instruction": ""
+    },
+    {
+      "id": "t2",
+      "summary": "Write the design note docs/design-notes/semantic-measurement.md answering issue unknowns 1-3",
+      "origin": "llm",
+      "status": "confirmed",
+      "acceptance_criteria": [
+        "the note has a section per unknown: gaps semantics (probe-based, dual-labeled), compare method (k-NN Jaccard + rank correlation, no shared-frame numbers), stability policy (params+seed, N-seed reruns + bootstrap, 'stability unverified' label)",
+        "a determinism-scope section states byte-identity holds for reader verbs over a fixed Atlas and cache-served vectors, and that live re-embedding may vary at float precision",
+        "a baseline section records the pre-work state verified at commit be4f6e8: six introspection verbs, no corpus/embedding/survey code, no disk writes, dependencies=[]",
+        "markdownlint-cli2 passes on the new file"
+      ],
+      "deps": [],
+      "covers": [
+        "c9",
+        "h8",
+        "c37",
+        "h24",
+        "c24",
+        "h16"
+      ],
+      "instruction": ""
+    },
+    {
+      "id": "t3",
+      "summary": "Define the typed Atlas schema in embeddings/atlas/schema.py",
+      "origin": "llm",
+      "status": "confirmed",
+      "acceptance_criteria": [
+        "the manifest dataclass/TypedDict requires schema_version, model, endpoint, params, seed, limitations[] and uncertain[]; constructing one without limitations or uncertain raises",
+        "a test asserts limitations and uncertain are non-optional schema fields, not conventions",
+        "SCHEMA_VERSION is a module-level constant the writer stamps and the reader compares against"
+      ],
+      "deps": [],
+      "covers": [
+        "c8"
+      ],
+      "instruction": ""
+    },
+    {
+      "id": "t4",
+      "summary": "Add atomic write-temp-then-rename helpers in embeddings/_atomic.py",
+      "origin": "llm",
+      "status": "confirmed",
+      "acceptance_criteria": [
+        "write_atomic(path, bytes) and atomic_dir(path) materialize only complete results; a simulated interruption mid-write leaves no partial file and no partial directory",
+        "a test that raises between batches asserts the target path does not exist afterwards",
+        "concurrent writers of identical content-addressed payloads both succeed with no corrupt result"
+      ],
+      "deps": [],
+      "covers": [
+        "c34",
+        "h21"
+      ],
+      "instruction": ""
+    },
+    {
+      "id": "t5",
+      "summary": "Build the OpenAI-compatible embedding client in embeddings/backends/client.py",
+      "origin": "llm",
+      "status": "confirmed",
+      "acceptance_criteria": [
+        "an unreachable endpoint raises CliError with code 2, a message naming the endpoint and a hint naming the override flag/env; no traceback leaks",
+        "a test pointing the client at a reserved dead port asserts exit 2 and the hint text",
+        "the only outbound host is the configured endpoint \u2014 asserted by a transport-level test that fails on any other host; no telemetry calls exist",
+        "the endpoint flag's help text states that a non-local endpoint ships corpus content off-machine",
+        "the transport is injectable so tests never open a real socket"
+      ],
+      "deps": [],
+      "covers": [
+        "c7",
+        "h6",
+        "c40",
+        "h27"
+      ],
+      "instruction": ""
+    },
+    {
+      "id": "t6",
+      "summary": "Add the corpus loader in embeddings/corpus.py",
+      "origin": "llm",
+      "status": "confirmed",
+      "acceptance_criteria": [
+        "each JSONL line requires a 'text' field; 'id' is optional and defaults to the line index; all other keys are preserved verbatim as item metadata",
+        "a line missing 'text' fails with CliError code 1 naming the line number",
+        "a round-trip test asserts extra keys survive into atlas records unchanged"
+      ],
+      "deps": [],
+      "covers": [],
+      "instruction": ""
+    },
+    {
+      "id": "t7",
+      "summary": "Retarget AGENTS.colleague.md to the Surveyor resident prompt",
+      "origin": "llm",
+      "status": "confirmed",
+      "acceptance_criteria": [
+        "the prompt describes the Surveyor role: run measured experiments through the CLI, never interpret single dimensions, record evidence-backed Atlases with limitations",
+        "embeddings doctor still reports healthy true; culture.yaml suffix stays embeddings-cli and backend stays colleague",
+        "the change is additive to the prompt file only \u2014 CLAUDE.md is not re-scaffolded and acceptance criteria 1 and 2 are not re-opened",
+        "the prompt is sufficient to drive the CLI without out-of-band knowledge: it points at learn and explain rather than restating them"
+      ],
+      "deps": [],
+      "covers": [
+        "c20",
+        "h13",
+        "c22",
+        "h14"
+      ],
+      "instruction": ""
+    },
+    {
+      "id": "t8",
+      "summary": "Build the hermetic test harness in tests/_fakes.py",
+      "origin": "llm",
+      "status": "confirmed",
+      "acceptance_criteria": [
+        "a fake embedding transport returns deterministic vectors for given texts, with no socket opened",
+        "the full pytest suite passes on a machine with nothing listening on any embedding endpoint \u2014 this is what CI itself proves on every PR",
+        "the dead-port failure test uses a reserved local port rather than the real gateway port"
+      ],
+      "deps": [],
+      "covers": [
+        "c38",
+        "h25"
+      ],
+      "instruction": ""
+    },
+    {
+      "id": "t9",
+      "summary": "Build the home-dir embed cache in embeddings/backends/cache.py",
+      "origin": "llm",
+      "status": "confirmed",
+      "acceptance_criteria": [
+        "cache entries live under ~/.embeddings/cache keyed by (model, sha256(text)), shared machine-wide and never inside a repo",
+        "each entry is written atomically via embeddings/_atomic.py; a killed run leaves no unreadable entry",
+        "a cache hit returns byte-identical vectors to what was stored; the cache path is overridable by flag/env for tests"
+      ],
+      "deps": [
+        "t4",
+        "t5"
+      ],
+      "covers": [],
+      "instruction": ""
+    },
+    {
+      "id": "t10",
+      "summary": "Build Atlas read/write in embeddings/atlas/io.py with a fail-closed version gate",
+      "origin": "llm",
+      "status": "confirmed",
+      "acceptance_criteria": [
+        "write_atlas persists atlas.json (manifest), records.jsonl, and .npy vector sidecars into an atlas/ directory, atomically and path-overridable",
+        "the shipped .gitignore excludes atlas vector sidecars (*.npy); after a default survey --apply inside a repo, git status shows no .npy files while manifest, records, and measurements are committable",
+        "read_atlas on an atlas whose schema_version is unknown or newer exits 2 with a hint naming the version mismatch and the writing CLI version \u2014 it never best-effort-parses",
+        "a test bumps schema_version beyond supported and asserts exit 2 plus the mismatch hint"
+      ],
+      "deps": [
+        "t3",
+        "t4"
+      ],
+      "covers": [
+        "c33",
+        "h20",
+        "c36",
+        "h23"
+      ],
+      "instruction": ""
+    },
+    {
+      "id": "t11",
+      "summary": "Build seed-resampling stability measurement in embeddings/measure/stability.py",
+      "origin": "llm",
+      "status": "confirmed",
+      "acceptance_criteria": [
+        "every measurement result carries params and seed keys; stability is agreement across N seed reruns plus bootstrap resampling (ARI for clusterings)",
+        "a single-run result is labeled 'stability unverified' rather than reported as a fact",
+        "re-running a reader verb over a fixed Atlas with identical inputs and seed produces byte-identical output \u2014 asserted by test, scoped per the design note's determinism section"
+      ],
+      "deps": [
+        "t1"
+      ],
+      "covers": [
+        "c11",
+        "h10"
+      ],
+      "instruction": ""
+    },
+    {
+      "id": "t12",
+      "summary": "Implement the survey verb in embeddings/cli/_commands/survey.py",
+      "origin": "llm",
+      "status": "confirmed",
+      "acceptance_criteria": [
+        "survey registers via register(sub) at the marked spot in _build_parser(), raises only CliError, and declares its own --json",
+        "teken cli doctor . --strict stays green, and a parse error inside survey renders error:/hint: with exit 1",
+        "without --apply survey previews corpus size, backend, and target path and performs zero filesystem writes \u2014 asserted by a test that snapshots the tree",
+        "with --apply onto an existing atlas it exits 1 with a hint naming --force; with --force the old atlas is replaced whole, never merged",
+        "embedding runs in configurable batches with transient-failure retry and stderr progress diagnostics, so a looping agent sees liveness"
+      ],
+      "deps": [
+        "t6",
+        "t9",
+        "t10"
+      ],
+      "covers": [
+        "c2",
+        "h2",
+        "c10",
+        "h9",
+        "c35",
+        "h22"
+      ],
+      "instruction": ""
+    },
+    {
+      "id": "t13",
+      "summary": "Add the shared reader-verb atlas entry path in embeddings/cli/_commands/_atlas_arg.py",
+      "origin": "llm",
+      "status": "confirmed",
+      "acceptance_criteria": [
+        "a reader verb with no atlas at the resolved path exits 1 with hint 'run embeddings survey <corpus> --apply first, or pass --atlas <path>'",
+        "the same reader with the gateway down but an atlas present succeeds \u2014 reader verbs never require the gateway",
+        "both paths are asserted by test, and exit 1 (nothing surveyed) is distinguishable from exit 2 (environment broken)"
+      ],
+      "deps": [
+        "t10"
+      ],
+      "covers": [
+        "c39",
+        "h26"
+      ],
+      "instruction": ""
+    },
+    {
+      "id": "t14",
+      "summary": "Implement the regions verb in embeddings/cli/_commands/regions.py",
+      "origin": "llm",
+      "status": "confirmed",
+      "acceptance_criteria": [
+        "regions clusters the Atlas into semantic regions and emits cluster membership, size, and representative items",
+        "output carries params and seed and a stability measure per region; --json shape is asserted by test",
+        "a region that survives only one parameter setting is reported as a finding about the parameters, not a fact"
+      ],
+      "deps": [
+        "t13",
+        "t11"
+      ],
+      "covers": [],
+      "instruction": ""
+    },
+    {
+      "id": "t15",
+      "summary": "Implement the neighbors verb in embeddings/cli/_commands/neighbors.py",
+      "origin": "llm",
+      "status": "confirmed",
+      "acceptance_criteria": [
+        "neighbors <text> embeds the query and returns its k nearest Atlas items with distances and a boundary description",
+        "it accepts an Atlas item id as an alternative to free text, requiring no gateway call in that case",
+        "--json shape asserted by test; params and seed recorded"
+      ],
+      "deps": [
+        "t13"
+      ],
+      "covers": [],
+      "instruction": ""
+    },
+    {
+      "id": "t16",
+      "summary": "Implement the directions noun group in embeddings/cli/_commands/directions.py",
+      "origin": "llm",
+      "status": "confirmed",
+      "acceptance_criteria": [
+        "the group exposes both 'directions discover' and 'directions overview', copying cli.py including parser_class=type(p) on add_subparsers",
+        "'embeddings directions' with no sub-verb prints the noun overview and exits 0; 'directions overview --json' returns the sections payload",
+        "discover proposes candidate directions and reports whether each generalizes to held-out pairs, with params, seed, and a stability measure"
+      ],
+      "deps": [
+        "t13",
+        "t11"
+      ],
+      "covers": [
+        "c3",
+        "h3"
+      ],
+      "instruction": ""
+    },
+    {
+      "id": "t17",
+      "summary": "Implement the gaps verb in embeddings/cli/_commands/gaps.py \u2014 probe-based and dual-labeled",
+      "origin": "llm",
+      "status": "confirmed",
+      "acceptance_criteria": [
+        "every finding is labeled either 'corpus coverage' (from the surveyed corpus) or 'model representation' (only from actively probing a sparse region with generated or held-out inputs embedded at probe time)",
+        "the two kinds are never merged into one count or one list, and the output states in prose that corpus sparsity alone says nothing about model capability",
+        "a test asserts that with probing disabled, zero model-representation findings are emitted"
+      ],
+      "deps": [
+        "t13",
+        "t15"
+      ],
+      "covers": [],
+      "instruction": ""
+    },
+    {
+      "id": "t18",
+      "summary": "Implement the compare verb in embeddings/cli/_commands/compare.py",
+      "origin": "llm",
+      "status": "confirmed",
+      "acceptance_criteria": [
+        "compare reports k-NN set overlap (Jaccard) and rank correlation on a shared probe set embedded by both models",
+        "no output value assumes a shared coordinate frame; raw cross-model coordinates and cosines are never emitted as comparable",
+        "the assumptions of the method are stated in the output, and params and seed are recorded"
+      ],
+      "deps": [
+        "t13"
+      ],
+      "covers": [],
+      "instruction": ""
+    },
+    {
+      "id": "t19",
+      "summary": "Implement the map verb in embeddings/cli/_commands/map.py",
+      "origin": "llm",
+      "status": "confirmed",
+      "acceptance_criteria": [
+        "map --html writes a self-contained single-file HTML artifact (no external requests, both light and dark themes) following the league-of-agents replay precedent",
+        "the projection's algorithm, params, and seed are visible in the artifact itself, with the parameter-dependence caveat stated",
+        "map without --html emits a text or JSON summary; --apply gating matches the other write verbs"
+      ],
+      "deps": [
+        "t13",
+        "t14"
+      ],
+      "covers": [],
+      "instruction": ""
+    },
+    {
+      "id": "t20",
+      "summary": "Move all seven verbs from planned to implemented across the four roadmap surfaces",
+      "origin": "llm",
+      "status": "confirmed",
+      "acceptance_criteria": [
+        "learn.py (_TEXT and planned_commands), overview.py (_PLANNED_VERBS), explain/catalog.py, and README.md all move the same seven verbs in one change \u2014 this task is the sole owner of those four files to avoid same-wave merge collisions",
+        "explain/catalog.py gains a self-contained entry per verb; explain resolves every new verb path",
+        "a test checks learn --json's commands and planned_commands lists against the registered parser, so the two can never drift again"
+      ],
+      "deps": [
+        "t12",
+        "t14",
+        "t15",
+        "t16",
+        "t17",
+        "t18",
+        "t19"
+      ],
+      "covers": [
+        "c4",
+        "h4"
+      ],
+      "instruction": ""
+    },
+    {
+      "id": "t21",
+      "summary": "Guard the stable contract and the CI gates",
+      "origin": "llm",
+      "status": "confirmed",
+      "acceptance_criteria": [
+        "_errors.py, _output.py, and cli/__init__.py semantics are unchanged: the existing introspection test suite passes unaltered throughout the work",
+        "a test asserts results go to stdout and errors/diagnostics to stderr with the hint: prefix in both text and --json mode, for every new verb",
+        "coverage stays at or above the fail_under=60 gate and the full CI matrix (tests, lint, bandit, markdownlint, rubric gate, version-check) is green"
+      ],
+      "deps": [
+        "t12"
+      ],
+      "covers": [
+        "c15",
+        "h12",
+        "c12",
+        "h11"
+      ],
+      "instruction": ""
+    },
+    {
+      "id": "t22",
+      "summary": "Prove the end-to-end path against the live lobes gateway",
+      "origin": "llm",
+      "status": "confirmed",
+      "acceptance_criteria": [
+        "all seven verbs are callable and each produces measured output from a real corpus surveyed through the lobes gateway",
+        "the Atlas round-trips: survey writes it, a reader verb loads it and reproduces the written measurements identically",
+        "every structural output is parameter-and-seed-stamped, supports --json, and cites the command that reproduces it",
+        "this run is operator-machine evidence recorded in the study, not a CI assertion \u2014 CI stays hermetic"
+      ],
+      "deps": [
+        "t20",
+        "t21"
+      ],
+      "covers": [
+        "c1",
+        "h1",
+        "c23",
+        "h15",
+        "h7"
+      ],
+      "instruction": ""
+    },
+    {
+      "id": "t23",
+      "summary": "Ship the first study: an Atlas of the eidetic recall embedder",
+      "origin": "llm",
+      "status": "confirmed",
+      "acceptance_criteria": [
+        "the committed Atlas answers whether Qwen3-Embedding-0.6B distinguishes what eidetic recall needs distinguished",
+        "every structural claim in it carries its reproducing command, params, seed, and stability measure",
+        "it demonstrates at least one model-specific finding a retrieval benchmark alone would not surface",
+        "its limitations[] and uncertain[] sections are populated from real measurement, not boilerplate"
+      ],
+      "deps": [
+        "t22"
+      ],
+      "covers": [
+        "c26",
+        "h18",
+        "c25",
+        "h17"
+      ],
+      "instruction": ""
+    }
+  ],
+  "risks": [
+    {
+      "id": "r1",
+      "text": "lobes gateway per-request batch/token limits and the real magnitude of embed float variance are unmeasured \u2014 the gateway was down throughout scoping and challenge. survey's batch size stays configurable and t22's live run measures both.",
+      "kind": "unknown_nonblocking",
+      "task_id": "t22",
+      "resolved": false,
+      "resolution": ""
+    },
+    {
+      "id": "r2",
+      "text": "wave-4 reader verbs are file-disjoint by construction (one _commands/*.py each), but all of them register in cli/__init__.py's _build_parser. That one shared line-range is the merge choke point: the merging agent applies registrations serially and re-runs the rubric gate after each.",
+      "kind": "unknown_nonblocking",
+      "task_id": null,
+      "resolved": false,
+      "resolution": ""
+    },
+    {
+      "id": "r3",
+      "text": "clustering/projection algorithm choice (k-means vs HDBSCAN, UMAP vs t-SNE) is not fixed by the spec \u2014 t11's stability contract holds regardless, but t14/t19 authors must pick and record one, and a later change reshapes committed study evidence.",
+      "kind": "follow_up",
+      "task_id": null,
+      "resolved": false,
+      "resolution": ""
+    }
+  ]
+}

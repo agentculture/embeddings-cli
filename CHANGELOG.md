@@ -5,6 +5,19 @@ All notable changes to this project will be documented in this file.
 Format follows [Keep a Changelog](https://keepachangelog.com/). This project
 adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.8.0] - 2026-07-20
+
+### Added
+
+- **The converged spec for the survey surface** — `docs/specs/2026-07-20-embeddings-survey-surface.md`, worked backwards from issue #1 through the devague `/scope` → `/think` → `/challenge` arc. Records 20 scope entries with file/line provenance, 10 requirements each carrying a testable honesty condition, the lane boundaries and non-goals, and six operator decisions: probe-based dual-labeled `gaps`, k-NN neighborhood agreement for `compare` v1, seed-resampling stability, the Atlas as a repo directory artifact, the `lobes` gateway as the embedding backend, and Surveyor as the agent persona.
+- **The buildable plan** — `docs/plans/2026-07-20-embeddings-survey-surface.md`: 23 file-disjoint tasks in 8 dependency waves, every one of the spec's 52 coverage targets claimed by a confirmed task with TDD-shaped acceptance criteria, plus three first-class plan risks.
+- **Nine findings from the rigorous `/challenge` pass**, adjudicated into the spec: the corpus JSONL field contract, atomic write-temp-then-rename for all disk writes, `survey --apply` refusing to overwrite an existing atlas without `--force`, a fail-closed `schema_version` gate, hermetic tests (CI has no gateway), a distinct exit-1 path for a missing atlas, and single-host network egress.
+
+### Changed
+
+- **Determinism claims are now scoped honestly** — byte-identical reproducibility holds for reader verbs over a fixed Atlas and cache-served vectors; live re-embedding may vary at float precision (GPU/vLLM nondeterminism), and an atlas written from live embeddings records that in its `limitations[]`.
+- **The Atlas commits its interpretation, not its bulk** — the manifest, records, and measurements are committable; `.npy` vector sidecars are regenerable and git-ignored. The embed cache moves to a machine-wide home-dir store at `~/.embeddings/cache`.
+
 ## [0.7.0] - 2026-07-20
 
 ### Added
