@@ -222,15 +222,17 @@ def test_fake_transport_fixture_opens_no_socket(fake_transport) -> None:  # noqa
 
 
 def test_no_sockets_fixture_blocks_a_real_connect(no_sockets: None) -> None:  # noqa: F811
+    sock = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
     with pytest.raises(NetworkBlockedError):
-        socket.socket(socket.AF_INET, socket.SOCK_STREAM).connect((DEAD_HOST, DEAD_PORT))
+        sock.connect((DEAD_HOST, DEAD_PORT))
 
 
 def test_blocked_sockets_guard_catches_a_real_connect_attempt() -> None:
     """Prove the guard itself works: a real connect() inside it must raise."""
+    sock = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
     with blocked_sockets():
         with pytest.raises(NetworkBlockedError):
-            socket.socket(socket.AF_INET, socket.SOCK_STREAM).connect((DEAD_HOST, DEAD_PORT))
+            sock.connect((DEAD_HOST, DEAD_PORT))
 
 
 def test_blocked_sockets_restores_real_connect_after_exit() -> None:

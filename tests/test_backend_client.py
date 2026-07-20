@@ -396,8 +396,9 @@ def test_auth_rejection_is_distinguishable_from_an_unreachable_gateway() -> None
     def _reject(url: str, data: bytes, headers: dict[str, str]) -> bytes:
         raise urllib.error.HTTPError(url, 401, "Unauthorized", {}, None)
 
+    gateway = client.EmbeddingClient(transport=_reject)
     with pytest.raises(CliError) as exc:
-        client.EmbeddingClient(transport=_reject).embed(["x"])
+        gateway.embed(["x"])
     assert exc.value.code == 2
     assert "rejected" in exc.value.message
     assert client.ENV_API_KEY in exc.value.remediation

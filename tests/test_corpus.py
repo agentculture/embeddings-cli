@@ -232,8 +232,9 @@ def test_duplicate_ids_are_refused_naming_both_lines(tmp_path) -> None:
         '{"text": "third", "id": "shared"}\n',
         encoding="utf-8",
     )
+    path = str(corpus)
     with pytest.raises(CliError) as exc:
-        load_corpus(str(corpus))
+        load_corpus(path)
     assert exc.value.code == 1
     # Both the offending line and the first occurrence, so the fix is obvious.
     assert "3" in exc.value.message and "1" in exc.value.message
@@ -253,6 +254,7 @@ def test_a_duplicate_of_an_auto_assigned_id_is_still_caught(tmp_path) -> None:
     """An explicit id colliding with an auto-assigned index must not slip through."""
     corpus = tmp_path / "mixed.jsonl"
     corpus.write_text('{"text": "auto gets id 0"}\n{"text": "explicit", "id": "0"}\n', "utf-8")
+    path = str(corpus)
     with pytest.raises(CliError) as exc:
-        load_corpus(str(corpus))
+        load_corpus(path)
     assert exc.value.code == 1

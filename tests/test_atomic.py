@@ -121,21 +121,38 @@ def test_atomic_dir_target_not_visible_before_clean_exit(tmp_path: Path) -> None
 # --- atomic_dir: simulated interruption between batches --------------------
 
 
+def _write_one_batch_then_interrupt(target: Path, batches_written: list[str]) -> None:
+    """Write one "batch" into the scratch dir, then raise -- simulating a crash
+    partway through a multi-batch ``atomic_dir`` write. Kept as its own
+    function (rather than inline in a ``pytest.raises`` block) so the block
+    itself contains exactly one call: this one."""
+    with atomic_dir(target) as scratch:
+        (scratch / "regions.json").write_bytes(b'{"regions": []}')
+        batches_written.append("regions")
+        raise RuntimeError("simulated interruption after first batch")
+
+
 def test_atomic_dir_interrupted_between_batches_leaves_no_target(tmp_path: Path) -> None:
     """Raising after writing one file ("batch") of several must leave no target directory."""
     target = tmp_path / "atlas"
     batches_written: list[str] = []
 
     with pytest.raises(RuntimeError, match="simulated interruption"):
-        with atomic_dir(target) as scratch:
-            (scratch / "regions.json").write_bytes(b'{"regions": []}')
-            batches_written.append("regions")
-            raise RuntimeError("simulated interruption after first batch")
+        _write_one_batch_then_interrupt(target, batches_written)
 
     assert batches_written == ["regions"]  # got partway through, as intended
     assert not target.exists()
     # the scratch directory used for the aborted write must be gone too
     assert list(tmp_path.iterdir()) == []
+
+
+def _overwrite_batch_then_interrupt(target: Path) -> None:
+    """Start replacing an existing ``atomic_dir`` target, then raise before it
+    completes. Kept as its own function so the ``pytest.raises`` block below
+    contains exactly one call: this one."""
+    with atomic_dir(target) as scratch:
+        (scratch / "regions.json").write_bytes(b"second atlas, never completes")
+        raise RuntimeError("simulated interruption")
 
 
 def test_atomic_dir_interrupted_preserves_previous_atlas(tmp_path: Path) -> None:
@@ -145,9 +162,7 @@ def test_atomic_dir_interrupted_preserves_previous_atlas(tmp_path: Path) -> None
         (scratch / "regions.json").write_bytes(b"first atlas")
 
     with pytest.raises(RuntimeError):
-        with atomic_dir(target) as scratch:
-            (scratch / "regions.json").write_bytes(b"second atlas, never completes")
-            raise RuntimeError("simulated interruption")
+        _overwrite_batch_then_interrupt(target)
 
     assert (target / "regions.json").read_bytes() == b"first atlas"
 
