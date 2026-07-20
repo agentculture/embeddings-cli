@@ -71,6 +71,11 @@ from embeddings.atlas.io import Atlas
 from embeddings.cli._commands._atlas_arg import add_atlas_argument, load_atlas
 from embeddings.cli._errors import EXIT_ENV_ERROR, EXIT_USER_ERROR, CliError
 from embeddings.cli._output import emit_result
+from embeddings.cli._provenance import (
+    REPRODUCED_BY_KEY,
+    reproduce_line,
+    reproducing_command,
+)
 from embeddings.measure import (
     AgreementDistribution,
     StabilityResult,
@@ -497,6 +502,8 @@ def _render(payload: dict) -> str:
         lines += [f"- {entry}" for entry in uncertain]
     else:
         lines.append("every region above survived its stability check at these parameters.")
+    lines.append("")
+    lines.append(reproduce_line(payload[REPRODUCED_BY_KEY]))
     return "\n".join(lines)
 
 
@@ -610,6 +617,7 @@ def cmd_regions(args: argparse.Namespace) -> int:
         "stability": overall.to_dict(),
         "regions": region_payloads,
         "uncertain": uncertain,
+        REPRODUCED_BY_KEY: reproducing_command(),
     }
     emit_result(payload if json_mode else _render(payload), json_mode=json_mode)
     return 0

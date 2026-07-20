@@ -128,6 +128,11 @@ from embeddings.cli._commands.regions import (
 )
 from embeddings.cli._errors import EXIT_ENV_ERROR, EXIT_USER_ERROR, CliError
 from embeddings.cli._output import emit_diagnostic, emit_result
+from embeddings.cli._provenance import (
+    REPRODUCED_BY_KEY,
+    reproduce_line,
+    reproducing_command,
+)
 from embeddings.measure import StabilityResult, measure_stability
 from embeddings.measure.stability import DEFAULT_RESAMPLES, DEFAULT_RUNS
 
@@ -1035,6 +1040,8 @@ def _render(payload: dict) -> str:
     if uncertain:
         lines.append("uncertain (belongs in the atlas manifest's uncertain[]):")
         lines += [f"- {entry}" for entry in uncertain]
+    lines.append("")
+    lines.append(reproduce_line(payload[REPRODUCED_BY_KEY]))
     return "\n".join(lines)
 
 
@@ -1255,6 +1262,7 @@ def cmd_gaps(args: argparse.Namespace) -> int:
         "seed": seed,
         "stability": stability.to_dict(),
         "uncertain": uncertain,
+        REPRODUCED_BY_KEY: reproducing_command(),
     }
 
     if outcome.diagnostic:

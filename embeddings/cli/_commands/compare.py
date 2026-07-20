@@ -108,6 +108,11 @@ from embeddings.atlas.schema import AtlasRecord
 from embeddings.cli._commands._atlas_arg import load_atlas
 from embeddings.cli._errors import EXIT_USER_ERROR, CliError
 from embeddings.cli._output import emit_result
+from embeddings.cli._provenance import (
+    REPRODUCED_BY_KEY,
+    reproduce_line,
+    reproducing_command,
+)
 from embeddings.measure import AgreementDistribution
 
 #: Names stamped on every distribution, so a reader never has to guess which
@@ -541,6 +546,7 @@ def _render(payload: dict[str, object]) -> str:
         lines += ["", "## notes", ""]
         lines += [f"- {note}" for note in notes]
 
+    lines += ["", reproduce_line(payload[REPRODUCED_BY_KEY])]
     return "\n".join(lines)
 
 
@@ -749,6 +755,7 @@ def cmd_compare(args: argparse.Namespace) -> int:
             "statement": NO_SHARED_FRAME_STATEMENT,
         },
         "notes": notes,
+        REPRODUCED_BY_KEY: reproducing_command(),
     }
 
     emit_result(payload if json_mode else _render(payload), json_mode=json_mode)

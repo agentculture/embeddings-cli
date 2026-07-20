@@ -72,6 +72,11 @@ from embeddings.backends import (
 from embeddings.backends.client import MODEL_FLAG, MODEL_HELP
 from embeddings.cli._errors import EXIT_ENV_ERROR, EXIT_USER_ERROR, CliError
 from embeddings.cli._output import emit_diagnostic, emit_result
+from embeddings.cli._provenance import (
+    REPRODUCED_BY_KEY,
+    reproduce_line,
+    reproducing_command,
+)
 from embeddings.corpus import CorpusItem, load_corpus
 
 #: The design-note §4 limitation entry written into ``limitations[]`` whenever
@@ -240,6 +245,7 @@ def _preview_payload(
         "cache_misses": cache_misses,
         "batch_size": batch_size,
         "seed": seed,
+        REPRODUCED_BY_KEY: reproducing_command(),
     }
 
 
@@ -262,6 +268,8 @@ def _render_preview(payload: dict[str, object]) -> str:
         lines.append("re-run with --apply --force to replace the existing atlas whole.")
     else:
         lines.append("re-run with --apply to embed the corpus and write the atlas.")
+    lines.append("")
+    lines.append(reproduce_line(payload[REPRODUCED_BY_KEY]))
     return "\n".join(lines)
 
 
@@ -281,6 +289,7 @@ def _render_applied(payload: dict[str, object]) -> str:
     if isinstance(limitations, list) and limitations:
         lines += ["", "limitations recorded in the manifest:"]
         lines += [f"- {entry}" for entry in limitations]
+    lines += ["", reproduce_line(payload[REPRODUCED_BY_KEY])]
     return "\n".join(lines)
 
 
@@ -405,6 +414,7 @@ def cmd_survey(args: argparse.Namespace) -> int:
         "embedded_live": cache_misses,
         "seed": int(args.seed),
         "limitations": limitations,
+        REPRODUCED_BY_KEY: reproducing_command(),
     }
     emit_diagnostic(f"survey: wrote atlas to {written}")
     emit_result(payload if json_mode else _render_applied(payload), json_mode=json_mode)
