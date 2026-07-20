@@ -484,8 +484,9 @@ def _atlas_without_vectors(tmp_path: Path) -> Path:
 
 
 def test_read_atlas_records_without_vectors_raises_cli_error(tmp_path: Path) -> None:
+    atlas_path = _atlas_without_vectors(tmp_path)
     with pytest.raises(CliError) as exc_info:
-        read_atlas(path=_atlas_without_vectors(tmp_path))
+        read_atlas(path=atlas_path)
 
     # Exit 1, not 2: the vectors are missing *by design* (git-ignored), so this
     # is a "you still have to generate this" user condition, exactly like the
@@ -496,8 +497,9 @@ def test_read_atlas_records_without_vectors_raises_cli_error(tmp_path: Path) -> 
 def test_read_atlas_missing_vectors_hint_tells_a_cloner_to_re_run_survey(
     tmp_path: Path,
 ) -> None:
+    atlas_path = _atlas_without_vectors(tmp_path)
     with pytest.raises(CliError) as exc_info:
-        read_atlas(path=_atlas_without_vectors(tmp_path))
+        read_atlas(path=atlas_path)
 
     assert VECTORS_FILENAME in exc_info.value.message
     assert "embeddings survey" in exc_info.value.remediation

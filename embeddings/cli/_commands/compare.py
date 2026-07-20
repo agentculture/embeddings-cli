@@ -671,7 +671,6 @@ def _agreement_per_item(
 def _build_notes(
     *,
     atlas_a: Atlas,
-    atlas_b: Atlas,
     same_model: bool,
     path_a: Path,
     path_b: Path,
@@ -763,7 +762,6 @@ def cmd_compare(args: argparse.Namespace) -> int:
     same_model = atlas_a.manifest.model == atlas_b.manifest.model
     notes = _build_notes(
         atlas_a=atlas_a,
-        atlas_b=atlas_b,
         same_model=same_model,
         path_a=path_a,
         path_b=path_b,

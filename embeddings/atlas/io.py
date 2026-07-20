@@ -221,6 +221,99 @@ def write_atlas(
     return target
 
 
+def _read_records(target: Path) -> list[AtlasRecord]:
+    """Parse ``records.jsonl``, or return ``[]`` when the atlas has no records file.
+
+    A malformed line is corruption of a committed artifact, so it fails at
+    exit 2 naming the line — not the caller's mistake to fix.
+    """
+    records: list[AtlasRecord] = []
+    records_path = target / RECORDS_FILENAME
+    if not records_path.is_file():
+        return records
+    for line_num, line in enumerate(records_path.read_text(encoding="utf-8").splitlines(), 1):
+        if not line:
+            continue
+        try:
+            record_payload = json.loads(line)
+        except json.JSONDecodeError as err:
+            raise CliError(
+                code=EXIT_ENV_ERROR,
+                message=f"malformed record on line {line_num} of {records_path}: {err}",
+                remediation="restore this atlas from git or re-run the survey that produced it",
+            ) from err
+        records.append(AtlasRecord(**record_payload))
+    return records
+
+
+def _read_vectors(target: Path, records: list[AtlasRecord]) -> np.ndarray:
+    """Load ``vectors.npy``, distinguishing "not generated yet" from "corrupt".
+
+    Three cases, and the difference between the first two is the whole
+    point: an *absent* sidecar alongside records is the expected state of a
+    fresh clone (the file is git-ignored by design) and is the caller's to
+    fix by re-running the survey; a *present* sidecar that does not back the
+    records is corruption of a committed artifact.
+    """
+    vectors_path = target / VECTORS_FILENAME
+    if vectors_path.is_file():
+        vectors = np.load(vectors_path, allow_pickle=False)
+    elif records:
+        # Records on disk but no vectors: the atlas is incomplete, and the
+        # reader must say so here rather than hand back a (0, 0) matrix that
+        # turns every `atlas.vectors[record.vector_index]` lookup downstream
+        # into a bare IndexError several call frames away from the cause.
+        #
+        # Exit 1 (user), not 2 (environment), and the choice is deliberate:
+        # `*.npy` is git-ignored on purpose — the manifest and records are the
+        # committable interpretation, the vectors are regenerable bulk — so
+        # "records present, vectors absent" is the *expected* state of a fresh
+        # clone of a repo carrying a committed atlas. Nothing is broken or
+        # corrupt; the operator simply has an artifact that has not been
+        # materialized on this machine yet, which is the same condition as the
+        # already-exit-1 "no atlas found" case one screen up, with the same
+        # fix (run the survey). Exit 2 is reserved here for on-disk state that
+        # re-running cannot explain away — an unreadable manifest, a schema
+        # this build cannot parse, or a vectors.npy that is present but
+        # inconsistent with the records (see the bounds check below). Keeping
+        # "not generated yet" at 1 also keeps an agent's retry logic uniform:
+        # exit 1 plus a "run survey" hint always means run the survey.
+        raise CliError(
+            code=EXIT_USER_ERROR,
+            message=(f"atlas at {target} has {len(records)} record(s) but no {VECTORS_FILENAME}"),
+            remediation=(
+                f"{VECTORS_FILENAME} is git-ignored by design (regenerable bulk, unlike the "
+                "committed manifest and records), so a fresh clone never carries it: re-run "
+                "`embeddings survey <corpus> --apply --force` against the same corpus and "
+                "model to regenerate the vectors for this atlas"
+            ),
+        )
+    else:
+        # Zero records and no vectors is a legitimately *empty* atlas, not an
+        # incomplete one — there is nothing to index into.
+        vectors = np.zeros((0, 0), dtype=np.float32)
+
+    # The vectors file exists; check it actually backs the records before any
+    # caller indexes into it. A present-but-inconsistent array is corruption
+    # (not the by-design absence above), so it fails at exit 2.
+    try:
+        _validate_vectors_and_indices(records, vectors)
+    except ValueError as err:
+        raise CliError(
+            code=EXIT_ENV_ERROR,
+            message=(
+                f"atlas at {target} has a {VECTORS_FILENAME} "
+                f"inconsistent with its records: {err}"
+            ),
+            remediation=(
+                "restore this atlas from git or re-run `embeddings survey <corpus> --apply "
+                "--force` to rewrite it whole"
+            ),
+        ) from err
+
+    return vectors
+
+
 def read_atlas(path: str | Path = DEFAULT_ATLAS_DIR) -> Atlas:
     """Load the atlas at ``path``, failing closed on a ``schema_version`` mismatch.
 
@@ -291,76 +384,8 @@ def read_atlas(path: str | Path = DEFAULT_ATLAS_DIR) -> Atlas:
     # the rest of the manifest shape and go on to parse records/vectors.
     manifest = AtlasManifest(**manifest_payload)
 
-    records: list[AtlasRecord] = []
-    records_path = target / RECORDS_FILENAME
-    if records_path.is_file():
-        for line_num, line in enumerate(records_path.read_text(encoding="utf-8").splitlines(), 1):
-            if not line:
-                continue
-            try:
-                record_payload = json.loads(line)
-            except json.JSONDecodeError as err:
-                raise CliError(
-                    code=EXIT_ENV_ERROR,
-                    message=f"malformed record on line {line_num} of {records_path}: {err}",
-                    remediation="restore this atlas from git or re-run the survey that produced it",
-                ) from err
-            records.append(AtlasRecord(**record_payload))
+    records = _read_records(target)
 
-    vectors_path = target / VECTORS_FILENAME
-    if vectors_path.is_file():
-        vectors = np.load(vectors_path, allow_pickle=False)
-    elif records:
-        # Records on disk but no vectors: the atlas is incomplete, and the
-        # reader must say so here rather than hand back a (0, 0) matrix that
-        # turns every `atlas.vectors[record.vector_index]` lookup downstream
-        # into a bare IndexError several call frames away from the cause.
-        #
-        # Exit 1 (user), not 2 (environment), and the choice is deliberate:
-        # `*.npy` is git-ignored on purpose — the manifest and records are the
-        # committable interpretation, the vectors are regenerable bulk — so
-        # "records present, vectors absent" is the *expected* state of a fresh
-        # clone of a repo carrying a committed atlas. Nothing is broken or
-        # corrupt; the operator simply has an artifact that has not been
-        # materialized on this machine yet, which is the same condition as the
-        # already-exit-1 "no atlas found" case one screen up, with the same
-        # fix (run the survey). Exit 2 is reserved here for on-disk state that
-        # re-running cannot explain away — an unreadable manifest, a schema
-        # this build cannot parse, or a vectors.npy that is present but
-        # inconsistent with the records (see the bounds check below). Keeping
-        # "not generated yet" at 1 also keeps an agent's retry logic uniform:
-        # exit 1 plus a "run survey" hint always means run the survey.
-        raise CliError(
-            code=EXIT_USER_ERROR,
-            message=(f"atlas at {target} has {len(records)} record(s) but no {VECTORS_FILENAME}"),
-            remediation=(
-                f"{VECTORS_FILENAME} is git-ignored by design (regenerable bulk, unlike the "
-                "committed manifest and records), so a fresh clone never carries it: re-run "
-                "`embeddings survey <corpus> --apply --force` against the same corpus and "
-                "model to regenerate the vectors for this atlas"
-            ),
-        )
-    else:
-        # Zero records and no vectors is a legitimately *empty* atlas, not an
-        # incomplete one — there is nothing to index into.
-        vectors = np.zeros((0, 0), dtype=np.float32)
-
-    # The vectors file exists; check it actually backs the records before any
-    # caller indexes into it. A present-but-inconsistent array is corruption
-    # (not the by-design absence above), so it fails at exit 2.
-    try:
-        _validate_vectors_and_indices(records, vectors)
-    except ValueError as err:
-        raise CliError(
-            code=EXIT_ENV_ERROR,
-            message=(
-                f"atlas at {target} has a {VECTORS_FILENAME} "
-                f"inconsistent with its records: {err}"
-            ),
-            remediation=(
-                "restore this atlas from git or re-run `embeddings survey <corpus> --apply "
-                "--force` to rewrite it whole"
-            ),
-        ) from err
+    vectors = _read_vectors(target, records)
 
     return Atlas(manifest=manifest, records=records, vectors=vectors, path=target)

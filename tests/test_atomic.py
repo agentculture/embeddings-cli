@@ -246,9 +246,14 @@ def test_atomic_dir_failed_replace_removes_the_scratch_directory(tmp_path: Path)
     target.mkdir()
     (target / "occupant.txt").write_text("pre-existing, non-empty", encoding="utf-8")
 
-    with pytest.raises(OSError):
+    def _build_into_an_occupied_target() -> None:
+        # The failure under test is the *replace* at the end of atomic_dir, not
+        # anything in here — extracted so pytest.raises wraps exactly one call.
         with atomic_dir(target) as tmp:
             (tmp / "records.jsonl").write_text("built but never swapped", encoding="utf-8")
+
+    with pytest.raises(OSError):
+        _build_into_an_occupied_target()
 
     leftovers = [p for p in tmp_path.iterdir() if p.name.startswith(".atlas")]
     assert leftovers == [], f"scratch directory leaked after a failed replace: {leftovers}"
