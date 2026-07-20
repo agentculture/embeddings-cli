@@ -70,8 +70,11 @@ def _build_parser() -> argparse.ArgumentParser:
     from embeddings.cli._commands import whoami as _whoami_cmd
 
     parser = _CliArgumentParser(
-        prog="embeddings-cli",
-        description="embeddings-cli — a clonable template for AgentCulture mesh agents.",
+        # The project/dist is named `embeddings-cli`; the console script declared
+        # in pyproject.toml is `embeddings`. prog must match what a user actually
+        # types, so every usage/error line stays copy-pasteable.
+        prog="embeddings",
+        description="embeddings-cli — study embedding spaces as systems, not individual vectors.",
     )
     parser.add_argument(
         "--version",

@@ -5,6 +5,26 @@ All notable changes to this project will be documented in this file.
 Format follows [Keep a Changelog](https://keepachangelog.com/). This project
 adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.7.0] - 2026-07-20
+
+### Added
+
+- **The project domain**, replacing the inherited `culture-agent-template` framing. `README.md` now describes what `embeddings-cli` is for: studying embedding spaces as systems — semantic regions, neighborhoods, directions, gaps, density, and cross-model differences — treating an embedding model as a semantic landscape, and serving as the deterministic tool surface for a Surveyor agent that records an evidence-backed Atlas.
+- **Planned-verb sections** in `learn`, `explain`, `overview`, and `README.md` naming the target survey surface (`survey`, `regions`, `neighbors`, `directions`, `gaps`, `compare`, `map`) under explicit *not yet implemented* headings, so an agent reading the CLI never mistakes a roadmap verb for a callable one.
+- `test_prog_matches_declared_console_script` — reads the console script out of `pyproject.toml` and asserts the parser's `prog` matches, guarding the pairing rather than the literal so a future rename that updates only one side fails loudly.
+- `command` and `planned_commands` keys in the `learn --json` payload.
+
+### Changed
+
+- **`prog` is now `embeddings`**, matching the console script declared in `pyproject.toml`. Every usage, help, and error line is now copy-pasteable.
+- **Retargeted the CLI's self-documentation** — `learn`, `explain/catalog.py`, and `overview` described this repo as "a clonable template for AgentCulture mesh agents" and explained how to clone it to mint a new agent. They now describe the embeddings/Surveyor domain.
+- Command invocations throughout docstrings, help strings, the `explain` catalog, and the `doctor` status line now read `embeddings ...`; `embeddings-cli` is reserved for the dist/repo/nick. The `explain` catalog keys both spellings to the root entry.
+- `CLAUDE.md` — replaced the roadmap placeholder with the real domain, recorded the naming convention, and noted the design constraints the survey surface will force (runtime dependencies, rubric shape of `directions discover`, Atlas persistence).
+
+### Fixed
+
+- **The CLI documented commands that did not exist.** `pyproject.toml` declares the binary `embeddings`, but `prog` and every help/catalog string said `embeddings-cli` — so `embeddings-cli whoami`, printed in the README quickstart and in the CLI's own `learn`/`explain` output, failed with "No such file or directory". Left over from the scaffold rename.
+
 ## [0.6.0] - 2026-07-18
 
 ### Added

@@ -21,7 +21,33 @@ def test_version_flag(capsys: pytest.CaptureFixture[str]) -> None:
 def test_no_args_prints_help(capsys: pytest.CaptureFixture[str]) -> None:
     rc = main([])
     assert rc == 0
-    assert "usage: embeddings-cli" in capsys.readouterr().out
+    # prog is the console script (`embeddings`), not the dist name.
+    assert "usage: embeddings" in capsys.readouterr().out
+
+
+def test_prog_matches_declared_console_script() -> None:
+    """``prog`` must match the console script declared in ``pyproject.toml``.
+
+    The scaffold rename left these disagreeing: pyproject declared the binary
+    ``embeddings`` while ``prog`` and every help/doc string said
+    ``embeddings-cli``, so the commands this CLI printed about itself were not
+    runnable. Guard the pairing rather than the literal, so a future rename that
+    updates both stays green and one that updates only one fails here.
+    """
+    import tomllib
+    from pathlib import Path
+
+    pyproject = Path(__file__).resolve().parents[1] / "pyproject.toml"
+    if not pyproject.is_file():  # pragma: no cover - wheel install, no source tree
+        pytest.skip("no pyproject.toml alongside the package")
+
+    scripts = tomllib.loads(pyproject.read_text(encoding="utf-8"))["project"]["scripts"]
+    assert len(scripts) == 1, "expected exactly one console script"
+    declared = next(iter(scripts))
+
+    from embeddings.cli import _build_parser
+
+    assert _build_parser().prog == declared
 
 
 def test_unknown_command_errors(capsys: pytest.CaptureFixture[str]) -> None:
@@ -97,7 +123,7 @@ def test_explain_json(capsys: pytest.CaptureFixture[str]) -> None:
     assert rc == 0
     payload = json.loads(capsys.readouterr().out)
     assert payload["path"] == ["whoami"]
-    assert "embeddings-cli whoami" in payload["markdown"]
+    assert "embeddings whoami" in payload["markdown"]
 
 
 def test_explain_unknown_path_errors(capsys: pytest.CaptureFixture[str]) -> None:

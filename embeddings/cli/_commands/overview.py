@@ -1,9 +1,9 @@
-"""``embeddings-cli overview`` — read-only descriptive snapshot of the agent.
+"""``embeddings overview`` — read-only descriptive snapshot of the agent.
 
 Describes the agent to an agent reader: identity (from culture.yaml), the verb
-surface, and the sibling-pattern artifacts this template carries. The shared
-section/render helpers here are reused by the ``cli`` noun's ``overview`` (see
-:mod:`embeddings.cli._commands.cli`).
+surface (implemented and planned), and the sibling-pattern artifacts this repo
+carries. The shared section/render helpers here are reused by the ``cli`` noun's
+``overview`` (see :mod:`embeddings.cli._commands.cli`).
 
 Descriptive verbs never hard-fail on a missing target path — an optional
 positional ``target`` is accepted and ignored (overview describes this agent,
@@ -32,6 +32,19 @@ _VERBS = [
     "doctor — check the agent-identity invariants",
 ]
 
+# The survey surface this project is being built toward. Listed separately from
+# _VERBS so an agent reading `overview` never mistakes a roadmap verb for a
+# callable one — none of these are registered on the parser yet.
+_PLANNED_VERBS = [
+    "survey <corpus> — embed a corpus and survey the resulting space",
+    "regions — identify semantic regions and clusters",
+    "neighbors <text> — inspect a neighborhood and its boundaries",
+    "directions — discover and test semantic directions",
+    "gaps — find weak, sparse, or uncertain coverage",
+    "compare <a> <b> — compare two models' geometry",
+    "map — render an interpretable map of the space",
+]
+
 
 def agent_sections() -> list[dict[str, object]]:
     """Sections describing the agent (used by the global verb)."""
@@ -47,6 +60,7 @@ def agent_sections() -> list[dict[str, object]]:
             ],
         },
         {"title": "Verbs", "items": list(_VERBS)},
+        {"title": "Planned verbs (not yet implemented)", "items": list(_PLANNED_VERBS)},
         {"title": "Sibling-pattern artifacts", "items": list(_ARTIFACTS)},
     ]
 

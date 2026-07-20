@@ -77,7 +77,7 @@ def test_cli_overview_unknown_flag_structured_error(
 def test_doctor_text(capsys: pytest.CaptureFixture[str]) -> None:
     rc = main(["doctor"])
     assert rc in (0, 1)
-    assert "embeddings-cli doctor" in capsys.readouterr().out
+    assert "embeddings doctor" in capsys.readouterr().out
 
 
 def test_doctor_json_shape(capsys: pytest.CaptureFixture[str]) -> None:

@@ -1,30 +1,136 @@
 # embeddings-cli
 
-Maps the geometry of meaning produced by embedding models — survey a corpus into a semantic landscape, then inspect its regions, neighborhoods, directions, and gaps, and compare models. Backs a Surveyor agent that runs measured experiments against the space and records an evidence-backed Atlas.
+**embeddings-cli is a tool for studying embedding spaces as systems, not just
+querying individual vectors.**
 
-## What you get
+An individual embedding is difficult to interpret. Its dimensions rarely
+correspond to clean human concepts, and inspecting the raw numbers tells us very
+little.
 
-- **An agent-first CLI** cited from [teken](https://github.com/agentculture/teken)
-  (`afi-cli`) — the runtime package has no third-party dependencies.
-- **A mesh identity** — `culture.yaml` (`suffix` + `backend`) and the matching
-  resident prompt file (`AGENTS.colleague.md`, since this template runs
-  `backend: colleague`).
-- **The canonical guildmaster skill kit** (11 skills) under `.claude/skills/`,
-  vendored cite-don't-import. See [`docs/skill-sources.md`](docs/skill-sources.md).
-- **A build + deploy baseline** — pytest, lint, the agent-first rubric gate, and
-  PyPI Trusted Publishing wired into GitHub Actions.
+But an embedding space contains larger structures that can be studied:
+
+- semantic regions and clusters;
+- neighborhoods and boundaries;
+- recurring directions of meaning;
+- dense, sparse, and ambiguous areas;
+- gaps in what the model represents;
+- differences between models, datasets, domains, and versions.
+
+`embeddings-cli` treats an embedding model as a **semantic landscape**.
+
+Instead of only asking:
+
+> Which documents are closest to this query?
+
+it asks:
+
+> What kind of world does this embedding model create?
+
+The CLI can embed a representative corpus, survey the resulting space, identify
+regions and directions, compare different embedding models, and generate an
+interpretable map of the model's semantic coverage.
+
+```bash
+embeddings survey corpus.jsonl
+embeddings regions
+embeddings neighbors "agentic culture"
+embeddings directions discover
+embeddings gaps
+embeddings compare model-a model-b
+embeddings map --html
+```
+
+The goal is not to assign a human-readable meaning to every dimension. That is
+usually unstable and misleading.
+
+The goal is to understand the **geometry of meaning produced by the model**:
+
+- what it places together;
+- what it keeps apart;
+- which distinctions it preserves;
+- which distinctions it collapses;
+- where concepts form continuous transitions;
+- where the representation becomes weak or uncertain.
+
+## Status
+
+The survey surface above is the **target design, not yet implemented**. What
+ships today is the agent-first CLI skeleton this project is built on — identity
+and introspection verbs (`whoami`, `learn`, `explain`, `overview`, `doctor`,
+`cli overview`), each with `--json`. See [CLI](#cli) for what actually runs.
+
+## The Surveyor agent
+
+`embeddings-cli` can also serve as the deterministic tool surface for a
+**Surveyor agent**.
+
+The Surveyor does not invent an interpretation from a single projection. It
+performs experiments against the space:
+
+1. samples representative concepts;
+2. searches for natural clusters;
+3. proposes names for regions;
+4. tests those names against independent examples;
+5. discovers candidate semantic directions;
+6. measures whether those directions generalize;
+7. identifies gaps, overlaps, and unstable boundaries;
+8. records the evidence behind every conclusion.
+
+The agent may describe a region, but the CLI provides the measurements that make
+the description inspectable and reproducible.
+
+## Outputs
+
+A study can produce an **Atlas** containing:
+
+- the datasets and models used;
+- representative points and neighborhoods;
+- hierarchical region maps;
+- discovered semantic directions;
+- cluster and boundary evidence;
+- coverage and density measurements;
+- model comparisons;
+- known limitations and uncertain interpretations.
+
+The Atlas is not the embedding space itself. It is an evidence-backed
+interpretation of that space.
+
+## Why it matters
+
+Embedding models are often treated as interchangeable infrastructure. They are
+selected using retrieval benchmarks and then hidden behind a vector database.
+
+But every embedding model defines its own system of similarity and distinction.
+
+Two models may disagree about:
+
+- whether two concepts are related;
+- which property of a sentence is most important;
+- how domains connect;
+- how multilingual meanings align;
+- whether a semantic change is gradual or abrupt;
+- which concepts are represented precisely and which are compressed together.
+
+`embeddings-cli` makes those differences visible.
+
+It turns embeddings from an opaque retrieval component into something that can
+be explored, evaluated, compared, and understood.
 
 ## Quickstart
 
 ```bash
 uv sync
-uv run pytest -n auto                 # run the test suite
-uv run embeddings-cli whoami  # identity from culture.yaml
-uv run embeddings-cli learn   # self-teaching prompt (add --json)
-uv run teken cli doctor . --strict    # the agent-first rubric gate CI runs
+uv run pytest -n auto              # run the test suite
+uv run embeddings whoami           # identity from culture.yaml
+uv run embeddings learn            # self-teaching prompt (add --json)
+uv run teken cli doctor . --strict # the agent-first rubric gate CI runs
 ```
 
+The project is named `embeddings-cli`; the installed command is **`embeddings`**.
+
 ## CLI
+
+Shipping today:
 
 | Verb | What it does |
 |------|--------------|
@@ -35,24 +141,12 @@ uv run teken cli doctor . --strict    # the agent-first rubric gate CI runs
 | `doctor` | Check the agent-identity invariants (prompt-file-present, backend-consistency). |
 | `cli overview` | Describe the CLI surface itself. |
 
+Planned (the survey surface): `survey`, `regions`, `neighbors`, `directions`,
+`gaps`, `compare`, `map`.
+
 Every command supports `--json`. Results go to stdout, errors/diagnostics to
 stderr (never mixed). Exit codes: `0` success, `1` user error, `2` environment
 error, `3+` reserved.
-
-## Make it your own
-
-1. Rename the package `embeddings/` and the `embeddings-cli`
-   CLI/dist name throughout `pyproject.toml`, the package, `tests/`,
-   `sonar-project.properties`, and this `README.md`. The name is hard-coded in
-   ~100 places, so list every occurrence first — see the `git grep` discovery
-   command in [`CLAUDE.md`](CLAUDE.md), the authoritative rename procedure.
-2. Edit `culture.yaml` with your `suffix` and `backend`.
-3. Rewrite `CLAUDE.md` for your agent and run `/init`.
-4. Re-vendor only the skills you need from guildmaster (see
-   [`docs/skill-sources.md`](docs/skill-sources.md)).
-
-See [`CLAUDE.md`](CLAUDE.md) for the full conventions (version-bump-every-PR,
-the `cicd` PR lane, deploy setup).
 
 ## License
 
