@@ -103,6 +103,7 @@ from typing import Iterable, Sequence
 
 import numpy as np
 
+from embeddings._numeric import MIN_NORM
 from embeddings.atlas.io import Atlas
 from embeddings.atlas.schema import AtlasRecord
 from embeddings.cli._commands._atlas_arg import load_atlas
@@ -134,7 +135,9 @@ CHANCE_DOMINATED_THRESHOLD = 0.25
 _TEXT_DISAGREEMENT_EXAMPLES = 5
 
 #: Guard against dividing a zero vector by its zero norm.
-_EPSILON = 1e-12
+#: Shared with the other cosine call sites so all four agree on what counts
+#: as a degenerate magnitude. See embeddings/_numeric.py for the derivation.
+_EPSILON = MIN_NORM
 
 #: Digits kept when serializing, matching ``embeddings.measure.stability``.
 _ROUND_DIGITS = 6

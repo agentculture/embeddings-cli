@@ -72,6 +72,7 @@ import argparse
 
 import numpy as np
 
+from embeddings._numeric import cosine_distances, is_degenerate
 from embeddings.atlas.io import Atlas
 from embeddings.atlas.schema import AtlasRecord
 from embeddings.backends import (
@@ -179,22 +180,19 @@ def _cosine_distances(vectors: np.ndarray, query: np.ndarray) -> np.ndarray:
     degenerate input, and reporting it as "as far as possible" keeps the
     output usable instead of poisoning the sort with a NaN.
     """
-    vectors = np.asarray(vectors, dtype=np.float64)
     query = np.asarray(query, dtype=np.float64)
-    query_norm = float(np.linalg.norm(query))
-    if query_norm == 0.0:
+    if is_degenerate(float(np.linalg.norm(query))):
+        # A degenerate query invalidates the whole call, not one row of it, so
+        # it is an error here rather than a discarded result. Tested by
+        # magnitude, not by equality with zero: a norm of 1e-300 is just as
+        # unusable as an exact zero, and dividing by it yields a finite number
+        # with no information in it.
         raise CliError(
             code=EXIT_USER_ERROR,
-            message="the query vector has zero magnitude; cosine distance is undefined for it",
+            message="the query vector has no usable magnitude; cosine distance is undefined for it",
             remediation="use a different query — an all-zero embedding cannot be compared",
         )
-    vector_norms = np.linalg.norm(vectors, axis=1)
-    with np.errstate(divide="ignore", invalid="ignore"):
-        cosine_similarity = (vectors @ query) / (vector_norms * query_norm)
-    zero_rows = vector_norms == 0.0
-    cosine_similarity = np.where(zero_rows, -1.0, cosine_similarity)
-    cosine_similarity = np.clip(cosine_similarity, -1.0, 1.0)
-    return 1.0 - cosine_similarity
+    return cosine_distances(vectors, query)
 
 
 def _nearest(

@@ -110,6 +110,7 @@ from pathlib import Path
 
 import numpy as np
 
+from embeddings._numeric import safe_norms
 from embeddings.atlas.io import Atlas
 from embeddings.backends import (
     ENDPOINT_FLAG,
@@ -227,10 +228,15 @@ def _cosine_distance_matrix(left: np.ndarray, right: np.ndarray) -> np.ndarray:
     """
     left = np.asarray(left, dtype=np.float64)
     right = np.asarray(right, dtype=np.float64)
-    scale = np.outer(np.linalg.norm(left, axis=1), np.linalg.norm(right, axis=1))
-    with np.errstate(divide="ignore", invalid="ignore"):
-        similarity = (left @ right.T) / scale
-    similarity = np.where(np.isfinite(similarity), similarity, -1.0)
+    # Guard by magnitude before dividing, not by filtering non-finite results
+    # afterwards: a norm of 1e-300 divides to a perfectly finite number that
+    # `isfinite` happily keeps, even though its direction is representation
+    # noise. Degenerate rows/columns are forced to maximal distance instead.
+    left_norms, left_degenerate = safe_norms(left)
+    right_norms, right_degenerate = safe_norms(right)
+    similarity = (left @ right.T) / np.outer(left_norms, right_norms)
+    degenerate = left_degenerate[:, None] | right_degenerate[None, :]
+    similarity = np.where(degenerate, -1.0, similarity)
     return 1.0 - np.clip(similarity, -1.0, 1.0)
 
 

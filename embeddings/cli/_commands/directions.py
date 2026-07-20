@@ -69,6 +69,7 @@ from typing import Sequence
 
 import numpy as np
 
+from embeddings._numeric import safe_norms
 from embeddings.atlas.io import Atlas
 from embeddings.cli._commands._atlas_arg import add_atlas_argument, load_atlas, resolve_atlas_path
 from embeddings.cli._commands.overview import emit_overview
@@ -288,13 +289,15 @@ def derive_directions(diffs: np.ndarray, top: int) -> tuple[np.ndarray, np.ndarr
 def alignment(diffs: np.ndarray, direction: np.ndarray) -> np.ndarray:
     """Cosine between each difference vector and ``direction`` (assumed unit length).
 
-    A zero-length difference (two items sharing a vector) scores 0.0 rather than
-    NaN: it carries no directional evidence either way, and a NaN would poison
-    the mean it feeds.
+    A difference with no usable magnitude (two items sharing a vector, or
+    separated only by float noise) scores 0.0 rather than NaN: it carries no
+    directional evidence either way, and a NaN would poison the mean it feeds.
+    Degeneracy is judged by magnitude via :func:`safe_norms`, not by ``> 0.0`` —
+    a difference of norm 1e-300 is noise, not evidence, and dividing by it
+    would yield a confident-looking alignment score built from nothing.
     """
-    norms = np.linalg.norm(diffs, axis=1)
-    safe = np.where(norms > 0.0, norms, 1.0)
-    return np.where(norms > 0.0, (diffs @ direction) / safe, 0.0)
+    safe, degenerate = safe_norms(diffs)
+    return np.where(degenerate, 0.0, (diffs @ direction) / safe)
 
 
 def _bipartition_fn(diffs: np.ndarray, rank: int, holdout: float, top: int):
