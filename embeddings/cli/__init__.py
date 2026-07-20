@@ -63,10 +63,14 @@ def _argv_has_json(argv: list[str] | None) -> bool:
 
 def _build_parser() -> argparse.ArgumentParser:
     from embeddings.cli._commands import cli as _cli_group
+    from embeddings.cli._commands import directions as _directions_group
     from embeddings.cli._commands import doctor as _doctor_cmd
     from embeddings.cli._commands import explain as _explain_cmd
     from embeddings.cli._commands import learn as _learn_cmd
+    from embeddings.cli._commands import neighbors as _neighbors_cmd
     from embeddings.cli._commands import overview as _overview_cmd
+    from embeddings.cli._commands import regions as _regions_cmd
+    from embeddings.cli._commands import survey as _survey_cmd
     from embeddings.cli._commands import whoami as _whoami_cmd
 
     parser = _CliArgumentParser(
@@ -91,18 +95,15 @@ def _build_parser() -> argparse.ArgumentParser:
     _overview_cmd.register(sub)
     _doctor_cmd.register(sub)
     _cli_group.register(sub)
-    from embeddings.cli._commands import survey as _survey_cmd
 
+    # The survey surface.
     _survey_cmd.register(sub)
-    from embeddings.cli._commands import regions as _regions_cmd
-
     _regions_cmd.register(sub)
+    _neighbors_cmd.register(sub)
+    _directions_group.register(sub)
     # Register your own noun groups here:
     #   from embeddings.cli._commands import my_noun as _my_noun_group
     #   _my_noun_group.register(sub)
-    from embeddings.cli._commands import neighbors as _neighbors_cmd
-
-    _neighbors_cmd.register(sub)
 
     return parser
 
