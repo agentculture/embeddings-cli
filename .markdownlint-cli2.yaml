@@ -17,6 +17,11 @@ config:
 ignores:
   - "node_modules/**"
   - ".local/**"
+  # Installed dependencies ship their own markdown (numpy vendors LICENSE.md).
+  # CI runs `uv sync` before linting, so without this the glob walks the venv
+  # and fails on third-party files we neither own nor can fix.
+  - ".venv/**"
+  - "venv/**"
   - ".afi/**"
   - ".teken/**"
   # Vendored skills are cited verbatim from guildmaster — do not reformat them.
