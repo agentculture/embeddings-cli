@@ -233,3 +233,12 @@ skills.local.yaml
 .devague/questions/
 
 .devague/reviews/
+
+# embeddings-cli Atlas vector sidecars: regenerable bulk, not the
+# interpretation. atlas.json (manifest) and records.jsonl (per-item records)
+# ARE committable — they are the evidence-backed interpretation a reviewer
+# reads and diffs. The .npy vector arrays are the bulk float32 vectors
+# themselves (~40MB per 10k items at 1024 dims per model) and are always
+# regenerable via `embeddings survey ... --apply` (from the embed cache, or a
+# live re-embed), so they never enter git. See embeddings/atlas/io.py.
+*.npy
