@@ -1,9 +1,6 @@
-# culture-agent-template
+# embeddings-cli
 
-Template repository for creating Culture agents with a consistent structure,
-lifecycle, skills, and operating contract. Clone it, rename the package, edit
-`culture.yaml`, and you have a new [AgentCulture](https://github.com/agentculture)
-mesh agent that `steward doctor` recognizes.
+Maps the geometry of meaning produced by embedding models — survey a corpus into a semantic landscape, then inspect its regions, neighborhoods, directions, and gaps, and compare models. Backs a Surveyor agent that runs measured experiments against the space and records an evidence-backed Atlas.
 
 ## What you get
 
@@ -22,8 +19,8 @@ mesh agent that `steward doctor` recognizes.
 ```bash
 uv sync
 uv run pytest -n auto                 # run the test suite
-uv run culture-agent-template whoami  # identity from culture.yaml
-uv run culture-agent-template learn   # self-teaching prompt (add --json)
+uv run embeddings-cli whoami  # identity from culture.yaml
+uv run embeddings-cli learn   # self-teaching prompt (add --json)
 uv run teken cli doctor . --strict    # the agent-first rubric gate CI runs
 ```
 
@@ -44,7 +41,7 @@ error, `3+` reserved.
 
 ## Make it your own
 
-1. Rename the package `culture_agent_template/` and the `culture-agent-template`
+1. Rename the package `embeddings/` and the `embeddings-cli`
    CLI/dist name throughout `pyproject.toml`, the package, `tests/`,
    `sonar-project.properties`, and this `README.md`. The name is hard-coded in
    ~100 places, so list every occurrence first — see the `git grep` discovery
