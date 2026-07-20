@@ -180,6 +180,11 @@ def _auth_hint() -> str:
     )
 
 
+def _is_coordinate(value: object) -> bool:
+    """True for a real number. ``bool`` is an ``int`` in Python but is not a coordinate."""
+    return isinstance(value, (int, float)) and not isinstance(value, bool)
+
+
 @dataclass
 class EmbeddingClient:
     """Client for a single OpenAI-compatible ``/v1/embeddings`` endpoint.
@@ -240,7 +245,8 @@ class EmbeddingClient:
 
         try:
             body = json.loads(raw)
-            return [item["embedding"] for item in body["data"]]
+            data = body["data"]
+            vectors = [item["embedding"] for item in data]
         except (json.JSONDecodeError, KeyError, TypeError, UnicodeDecodeError) as err:
             raise CliError(
                 code=EXIT_ENV_ERROR,
@@ -251,3 +257,73 @@ class EmbeddingClient:
                     f"{ENDPOINT_FLAG} / {ENV_BASE_URL}"
                 ),
             ) from err
+
+        self._check_batch_contract(list(texts), data, vectors, endpoint)
+        return vectors
+
+    def _check_batch_contract(
+        self,
+        texts: list[str],
+        data: object,
+        vectors: list[list[float]],
+        endpoint: str,
+    ) -> None:
+        """Enforce "one well-formed, same-dimension vector per input", or raise.
+
+        This is the single place the batch contract is checked, deliberately:
+        every caller downstream (``get_or_embed``, then ``survey``) pairs
+        vectors with texts positionally and *nothing* re-verifies the pairing.
+        A backend that returns a short batch would therefore attach the wrong
+        vector to the wrong record, persist that into an atlas, and make every
+        measurement built on it confidently wrong with nothing reporting it —
+        the exact failure class this tool exists to rule out. Failing loudly
+        here is the only place that catch is cheap.
+
+        Exit 2 (environment/setup) rather than 1: the operator's command was
+        fine; the configured backend is misbehaving.
+        """
+        if not isinstance(data, list):
+            raise self._contract_error(
+                endpoint, f"'data' is {type(data).__name__}, expected a list"
+            )
+
+        if len(vectors) != len(texts):
+            raise self._contract_error(
+                endpoint,
+                f"asked for {len(texts)} embedding(s) but got {len(vectors)} back",
+            )
+
+        expected_dim: int | None = None
+        for index, vector in enumerate(vectors):
+            if not isinstance(vector, list) or not vector:
+                raise self._contract_error(
+                    endpoint,
+                    f"embedding {index} is not a non-empty list of numbers",
+                )
+            # bool is a subclass of int in Python, and a bool is not a
+            # coordinate — a backend answering with booleans is broken, not
+            # merely low-precision.
+            if any(not _is_coordinate(value) for value in vector):
+                raise self._contract_error(
+                    endpoint, f"embedding {index} contains a non-numeric coordinate"
+                )
+            if expected_dim is None:
+                expected_dim = len(vector)
+            elif len(vector) != expected_dim:
+                raise self._contract_error(
+                    endpoint,
+                    f"inconsistent dimension within one batch: embedding 0 has "
+                    f"{expected_dim} values, embedding {index} has {len(vector)}",
+                )
+
+    @staticmethod
+    def _contract_error(endpoint: str, detail: str) -> CliError:
+        return CliError(
+            code=EXIT_ENV_ERROR,
+            message=f"embedding backend at {endpoint} broke the batch contract: {detail}",
+            remediation=(
+                f"verify the endpoint at {endpoint} is OpenAI-compatible and returns "
+                "one embedding per input, in request order, all of the same dimension; "
+                f"override it with {ENDPOINT_FLAG} / {ENV_BASE_URL} if this is the wrong backend"
+            ),
+        )

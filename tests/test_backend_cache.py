@@ -32,6 +32,7 @@ from embeddings.backends.cache import (
     text_digest,
 )
 from embeddings.backends.client import EmbeddingClient
+from embeddings.cli._errors import EXIT_ENV_ERROR, CliError
 from tests._fakes import FakeEmbeddingTransport, deterministic_vector
 
 
@@ -345,3 +346,58 @@ def test_get_or_embed_empty_input_makes_no_transport_call(tmp_path: Path) -> Non
 
     assert result == []
     assert transport.call_count == 0
+
+
+# --- the miscount guard: a bad response must never poison the cache ---------
+#
+# ``EmbeddingClient.embed`` enforces "one vector per input" itself, so this is
+# belt-and-braces against a *different* client implementation (or a future
+# refactor) that doesn't. It matters because the cache is durable: a single
+# misaligned write would keep returning the wrong vector for that text on every
+# later run, long after the misbehaving backend was fixed.
+
+
+class _MiscountingClient:
+    """Stand-in client that returns the wrong number of vectors, no validation."""
+
+    def __init__(self, vectors: list[list[float]], model: str = "test-model") -> None:
+        self.vectors = vectors
+        self.model = model
+        self.calls = 0
+
+    def embed(self, texts: list[str]) -> list[list[float]]:
+        self.calls += 1
+        return self.vectors
+
+
+def test_get_or_embed_short_response_raises_cli_error_code_2(tmp_path: Path) -> None:
+    cache = EmbeddingCache(root=tmp_path)
+    client = _MiscountingClient([[1.0, 2.0]])
+
+    with pytest.raises(CliError) as exc_info:
+        get_or_embed(cache, client, ["a", "b"])  # type: ignore[arg-type]
+
+    assert exc_info.value.code == EXIT_ENV_ERROR
+
+
+def test_get_or_embed_long_response_raises_cli_error_code_2(tmp_path: Path) -> None:
+    cache = EmbeddingCache(root=tmp_path)
+    client = _MiscountingClient([[1.0, 2.0], [3.0, 4.0]])
+
+    with pytest.raises(CliError) as exc_info:
+        get_or_embed(cache, client, ["a"])  # type: ignore[arg-type]
+
+    assert exc_info.value.code == EXIT_ENV_ERROR
+
+
+def test_get_or_embed_miscount_writes_no_cache_entry(tmp_path: Path) -> None:
+    """The check happens *before* the first put — nothing lands on disk."""
+    cache = EmbeddingCache(root=tmp_path)
+    client = _MiscountingClient([[1.0, 2.0]])
+
+    with pytest.raises(CliError):
+        get_or_embed(cache, client, ["a", "b"])  # type: ignore[arg-type]
+
+    assert [p for p in tmp_path.rglob("*") if p.is_file()] == []
+    assert cache.get("test-model", "a") is None
+    assert cache.get("test-model", "b") is None

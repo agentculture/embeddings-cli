@@ -449,3 +449,95 @@ def test_survey_apply_leaves_no_npy_in_git_status_but_manifest_is_committable(
     assert ".npy" not in status
     assert f"atlas/{MANIFEST_FILENAME}" in status
     assert f"atlas/{RECORDS_FILENAME}" in status
+
+
+# --- read_atlas: records present, vectors.npy absent -------------------------
+#
+# This is *not* an exotic corruption case: ``*.npy`` is deliberately
+# git-ignored (the manifest and records are the committable interpretation;
+# the vectors are regenerable bulk), so "records committed, vectors absent" is
+# the normal state of a freshly-cloned repo that carries a committed atlas.
+# The reader must say so plainly instead of handing back a (0, 0) matrix that
+# makes every ``vector_index`` lookup an IndexError three call frames later.
+
+
+def _atlas_without_vectors(tmp_path: Path) -> Path:
+    """A committed-atlas checkout: manifest + records on disk, no ``.npy``."""
+    target = tmp_path / "atlas"
+    write_atlas(_manifest(), _records(), _vectors(), path=target)
+    (target / VECTORS_FILENAME).unlink()
+    return target
+
+
+def test_read_atlas_records_without_vectors_raises_cli_error(tmp_path: Path) -> None:
+    with pytest.raises(CliError) as exc_info:
+        read_atlas(path=_atlas_without_vectors(tmp_path))
+
+    # Exit 1, not 2: the vectors are missing *by design* (git-ignored), so this
+    # is a "you still have to generate this" user condition, exactly like the
+    # already-exit-1 "no atlas found" case — not a broken environment.
+    assert exc_info.value.code == EXIT_USER_ERROR
+
+
+def test_read_atlas_missing_vectors_hint_tells_a_cloner_to_re_run_survey(
+    tmp_path: Path,
+) -> None:
+    with pytest.raises(CliError) as exc_info:
+        read_atlas(path=_atlas_without_vectors(tmp_path))
+
+    assert VECTORS_FILENAME in exc_info.value.message
+    assert "embeddings survey" in exc_info.value.remediation
+    # The hint must explain *why* the file is absent, or a cloner reads this as
+    # a corrupt atlas and goes looking for a bug that isn't there.
+    assert "git" in exc_info.value.remediation
+
+
+def test_read_atlas_empty_atlas_without_vectors_still_loads(tmp_path: Path) -> None:
+    """Zero records and no vectors is a legitimately empty atlas, not an incomplete one."""
+    target = tmp_path / "atlas"
+    write_atlas(_manifest(), [], np.zeros((0, 3), dtype=np.float32), path=target)
+    (target / VECTORS_FILENAME).unlink()
+
+    atlas = read_atlas(path=target)
+
+    assert atlas.records == []
+    assert atlas.vectors.shape[0] == 0
+
+
+def test_read_atlas_neighbors_by_id_reports_cleanly_instead_of_indexerror(
+    tmp_path: Path,
+) -> None:
+    """The end-to-end failure Qodo found: ``neighbors --id`` on a vectorless atlas."""
+    from embeddings.cli import main
+
+    target = _atlas_without_vectors(tmp_path)
+    exit_code = main(["neighbors", "--id", "0", "--atlas", str(target)])
+
+    assert exit_code == EXIT_USER_ERROR
+
+
+def test_read_atlas_truncated_vectors_is_an_environment_error(tmp_path: Path) -> None:
+    """A vectors.npy that is *present but too short* is corruption, not absence.
+
+    Absence is expected (git-ignored); a truncated array is not, so it gets the
+    stronger exit 2 and a different remediation.
+    """
+    target = tmp_path / "atlas"
+    write_atlas(_manifest(), _records(), _vectors(), path=target)
+    np.save(target / VECTORS_FILENAME, np.array([[0.1, 0.2, 0.3]], dtype=np.float32))
+
+    with pytest.raises(CliError) as exc_info:
+        read_atlas(path=target)
+
+    assert exc_info.value.code == EXIT_ENV_ERROR
+
+
+def test_read_atlas_non_2d_vectors_is_an_environment_error(tmp_path: Path) -> None:
+    target = tmp_path / "atlas"
+    write_atlas(_manifest(), _records(), _vectors(), path=target)
+    np.save(target / VECTORS_FILENAME, np.array([0.1, 0.2, 0.3], dtype=np.float32))
+
+    with pytest.raises(CliError) as exc_info:
+        read_atlas(path=target)
+
+    assert exc_info.value.code == EXIT_ENV_ERROR

@@ -75,6 +75,7 @@ import numpy as np
 
 from embeddings._atomic import write_atomic
 from embeddings.backends.client import EmbeddingClient
+from embeddings.cli._errors import EXIT_ENV_ERROR, CliError
 
 #: Environment variable that overrides the cache root, following the
 #: EMBEDDINGS_* naming convention established by
@@ -213,6 +214,25 @@ def get_or_embed(
     if pending:
         miss_texts = list(pending)
         vectors = client.embed(miss_texts)
+        # Belt-and-braces. EmbeddingClient.embed already enforces one vector
+        # per input, so this can only fire for a differently-implemented
+        # client — but it has to fire *before* the first put(), because the
+        # cache is durable: one misaligned write would keep handing back the
+        # wrong vector for that text on every later run, long after the
+        # misbehaving backend was fixed. A poisoned cache is silent and
+        # permanent; refusing the whole batch costs one re-run.
+        if len(vectors) != len(miss_texts):
+            raise CliError(
+                code=EXIT_ENV_ERROR,
+                message=(
+                    f"embedding backend returned {len(vectors)} vector(s) for "
+                    f"{len(miss_texts)} text(s); refusing to cache a misaligned batch"
+                ),
+                remediation=(
+                    "verify the embedding endpoint is OpenAI-compatible and returns "
+                    "one embedding per input, in request order"
+                ),
+            )
         for text, vector in zip(miss_texts, vectors):
             materialized_vector = list(vector)
             cache.put(client.model, text, materialized_vector)

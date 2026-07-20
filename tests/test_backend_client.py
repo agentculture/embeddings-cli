@@ -218,6 +218,131 @@ def test_response_missing_data_key_raises_cli_error_code_2() -> None:
     assert exc_info.value.code == 2
 
 
+# --- the one-embedding-per-input contract ------------------------------------
+#
+# A backend that answers with the wrong *number* or the wrong *shape* of
+# vectors is the most dangerous failure this client can pass through: nothing
+# downstream re-checks the pairing, so a short batch would silently attach the
+# wrong vector to the wrong text and every measurement built on that atlas
+# would be confidently wrong. The contract is therefore enforced here, once,
+# and every violation is a CliError (exit 2 — the backend is misbehaving,
+# which is an environment problem, not something the operator typed wrong).
+
+
+def _response(data: object) -> bytes:
+    return json.dumps({"object": "list", "data": data}).encode("utf-8")
+
+
+def _client_returning(data: object) -> EmbeddingClient:
+    return EmbeddingClient(
+        base_url="http://localhost:8002/v1", transport=_RecordingTransport(_response(data))
+    )
+
+
+def test_short_data_list_raises_cli_error_code_2() -> None:
+    """Two texts in, one vector back — the pairing is unrecoverable."""
+    client = _client_returning([{"embedding": [0.1, 0.2]}])
+
+    with pytest.raises(CliError) as exc_info:
+        client.embed(["hello", "world"])
+
+    assert exc_info.value.code == EXIT_ENV_ERROR
+    assert "1" in exc_info.value.message and "2" in exc_info.value.message
+    assert "one embedding per input" in exc_info.value.remediation
+
+
+def test_over_long_data_list_raises_cli_error_code_2() -> None:
+    client = _client_returning([{"embedding": [0.1, 0.2]}, {"embedding": [0.3, 0.4]}])
+
+    with pytest.raises(CliError) as exc_info:
+        client.embed(["hello"])
+
+    assert exc_info.value.code == EXIT_ENV_ERROR
+    assert "one embedding per input" in exc_info.value.remediation
+
+
+def test_ragged_dimensions_raise_cli_error_code_2() -> None:
+    """Inconsistent dimensionality within one batch — np.asarray would go ragged."""
+    client = _client_returning([{"embedding": [0.1, 0.2, 0.3]}, {"embedding": [0.4, 0.5]}])
+
+    with pytest.raises(CliError) as exc_info:
+        client.embed(["hello", "world"])
+
+    assert exc_info.value.code == EXIT_ENV_ERROR
+    assert "dimension" in exc_info.value.message
+
+
+def test_non_numeric_embedding_raises_cli_error_code_2() -> None:
+    client = _client_returning([{"embedding": ["not", "numbers"]}])
+
+    with pytest.raises(CliError) as exc_info:
+        client.embed(["hello"])
+
+    assert exc_info.value.code == EXIT_ENV_ERROR
+
+
+def test_empty_embedding_raises_cli_error_code_2() -> None:
+    client = _client_returning([{"embedding": []}])
+
+    with pytest.raises(CliError) as exc_info:
+        client.embed(["hello"])
+
+    assert exc_info.value.code == EXIT_ENV_ERROR
+
+
+def test_data_not_a_list_raises_cli_error_code_2() -> None:
+    client = _client_returning({"embedding": [0.1, 0.2]})
+
+    with pytest.raises(CliError) as exc_info:
+        client.embed(["hello"])
+
+    assert exc_info.value.code == EXIT_ENV_ERROR
+
+
+def test_embedding_not_a_sequence_raises_cli_error_code_2() -> None:
+    client = _client_returning([{"embedding": 0.5}])
+
+    with pytest.raises(CliError) as exc_info:
+        client.embed(["hello"])
+
+    assert exc_info.value.code == EXIT_ENV_ERROR
+
+
+def test_bool_is_not_accepted_as_a_number() -> None:
+    """``True`` is an ``int`` in Python; it is not a coordinate."""
+    client = _client_returning([{"embedding": [True, False]}])
+
+    with pytest.raises(CliError) as exc_info:
+        client.embed(["hello"])
+
+    assert exc_info.value.code == EXIT_ENV_ERROR
+
+
+def test_contract_violation_names_the_endpoint_and_carries_a_hint() -> None:
+    """Every contract failure is reportable: it names the endpoint and remediates."""
+    client = _client_returning([])
+
+    with pytest.raises(CliError) as exc_info:
+        client.embed(["hello"])
+
+    assert "http://localhost:8002/v1/embeddings" in exc_info.value.message
+    assert exc_info.value.remediation
+
+
+def test_well_formed_batch_of_many_passes_the_contract() -> None:
+    """The happy path stays happy: n texts, n same-dimension vectors, no error."""
+    client = _client_returning([{"embedding": [0.1, 0.2]} for _ in range(3)])
+
+    assert client.embed(["a", "b", "c"]) == [[0.1, 0.2]] * 3
+
+
+def test_integer_coordinates_are_accepted() -> None:
+    """A backend answering with ints (not floats) is well-formed, not a violation."""
+    client = _client_returning([{"embedding": [0, 1, 2]}])
+
+    assert client.embed(["hello"]) == [[0, 1, 2]]
+
+
 # --- dead-port test: the real urllib transport against a reserved port ------
 
 

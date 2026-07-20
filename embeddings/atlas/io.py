@@ -241,10 +241,13 @@ def read_atlas(path: str | Path = DEFAULT_ATLAS_DIR) -> Atlas:
 
     Raises:
         CliError: no atlas manifest exists at ``path`` (exit 1, user error);
-            or the manifest's ``schema_version`` does not match this
-            embeddings-cli's :data:`SCHEMA_VERSION` (exit 2,
-            environment/setup); or ``atlas.json``/``records.jsonl`` contain
-            malformed JSON (exit 2 — a corrupt committed artifact is an
+            the atlas has records but no ``vectors.npy`` (exit 1 — the sidecar
+            is git-ignored by design, so a fresh clone must regenerate it; see
+            the comment at the check); or the manifest's ``schema_version``
+            does not match this embeddings-cli's :data:`SCHEMA_VERSION`
+            (exit 2, environment/setup); or ``atlas.json``/``records.jsonl``
+            contain malformed JSON, or ``vectors.npy`` is present but does not
+            back the records (exit 2 — a corrupt committed artifact is an
             environment problem, not a usage mistake).
     """
     target = Path(path)
@@ -307,7 +310,57 @@ def read_atlas(path: str | Path = DEFAULT_ATLAS_DIR) -> Atlas:
     vectors_path = target / VECTORS_FILENAME
     if vectors_path.is_file():
         vectors = np.load(vectors_path, allow_pickle=False)
+    elif records:
+        # Records on disk but no vectors: the atlas is incomplete, and the
+        # reader must say so here rather than hand back a (0, 0) matrix that
+        # turns every `atlas.vectors[record.vector_index]` lookup downstream
+        # into a bare IndexError several call frames away from the cause.
+        #
+        # Exit 1 (user), not 2 (environment), and the choice is deliberate:
+        # `*.npy` is git-ignored on purpose — the manifest and records are the
+        # committable interpretation, the vectors are regenerable bulk — so
+        # "records present, vectors absent" is the *expected* state of a fresh
+        # clone of a repo carrying a committed atlas. Nothing is broken or
+        # corrupt; the operator simply has an artifact that has not been
+        # materialized on this machine yet, which is the same condition as the
+        # already-exit-1 "no atlas found" case one screen up, with the same
+        # fix (run the survey). Exit 2 is reserved here for on-disk state that
+        # re-running cannot explain away — an unreadable manifest, a schema
+        # this build cannot parse, or a vectors.npy that is present but
+        # inconsistent with the records (see the bounds check below). Keeping
+        # "not generated yet" at 1 also keeps an agent's retry logic uniform:
+        # exit 1 plus a "run survey" hint always means run the survey.
+        raise CliError(
+            code=EXIT_USER_ERROR,
+            message=(f"atlas at {target} has {len(records)} record(s) but no {VECTORS_FILENAME}"),
+            remediation=(
+                f"{VECTORS_FILENAME} is git-ignored by design (regenerable bulk, unlike the "
+                "committed manifest and records), so a fresh clone never carries it: re-run "
+                "`embeddings survey <corpus> --apply --force` against the same corpus and "
+                "model to regenerate the vectors for this atlas"
+            ),
+        )
     else:
+        # Zero records and no vectors is a legitimately *empty* atlas, not an
+        # incomplete one — there is nothing to index into.
         vectors = np.zeros((0, 0), dtype=np.float32)
+
+    # The vectors file exists; check it actually backs the records before any
+    # caller indexes into it. A present-but-inconsistent array is corruption
+    # (not the by-design absence above), so it fails at exit 2.
+    try:
+        _validate_vectors_and_indices(records, vectors)
+    except ValueError as err:
+        raise CliError(
+            code=EXIT_ENV_ERROR,
+            message=(
+                f"atlas at {target} has a {VECTORS_FILENAME} "
+                f"inconsistent with its records: {err}"
+            ),
+            remediation=(
+                "restore this atlas from git or re-run `embeddings survey <corpus> --apply "
+                "--force` to rewrite it whole"
+            ),
+        ) from err
 
     return Atlas(manifest=manifest, records=records, vectors=vectors, path=target)

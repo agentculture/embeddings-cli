@@ -215,3 +215,27 @@ def test_write_atomic_concurrent_writers_repeated_rounds_stay_clean(tmp_path: Pa
         assert errors == []
         assert target.read_bytes() == payload
         assert list(tmp_path.iterdir()) == [target]
+
+
+# --- atomic_dir: a failing replace must not leak the scratch directory ------
+#
+# ``atomic_dir`` documents that it cannot swap onto a *non-empty* existing
+# target (POSIX rename(2) refuses), and leaves handling that to the caller.
+# But when the replace does fail, the scratch directory is a full copy of
+# whatever the block just built — an entire atlas, potentially — and it must
+# not be left behind on disk under a dotted name nobody ever looks at.
+
+
+def test_atomic_dir_failed_replace_removes_the_scratch_directory(tmp_path: Path) -> None:
+    target = tmp_path / "atlas"
+    target.mkdir()
+    (target / "occupant.txt").write_text("pre-existing, non-empty", encoding="utf-8")
+
+    with pytest.raises(OSError):
+        with atomic_dir(target) as tmp:
+            (tmp / "records.jsonl").write_text("built but never swapped", encoding="utf-8")
+
+    leftovers = [p for p in tmp_path.iterdir() if p.name.startswith(".atlas")]
+    assert leftovers == [], f"scratch directory leaked after a failed replace: {leftovers}"
+    # The pre-existing target is untouched.
+    assert (target / "occupant.txt").read_text(encoding="utf-8") == "pre-existing, non-empty"
