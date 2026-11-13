@@ -35,9 +35,10 @@ What is copied, and what is not
   harmless), and ``text_included`` is ``false``.
 * ``provenance.source`` is ``atlas: <folder name>`` -- the Atlas folder's own
   name, never the path as given, so no local absolute path reaches a page.
-* Both files get the ordinary umask-governed mode of a new file (0644 under a
-  022 umask), not ``write_atomic``'s private 0600, because a static web server
-  running as another user must be able to read them.
+* Both files get mode 0644 reduced by the umask (0644 under 022, 0640 under
+  027, never group or other write), not ``write_atomic``'s private 0600,
+  because a static web server running as another user must be able to read
+  them.
 * ``provenance.created`` is not written, so the same Atlas and options give a
   byte-identical pair.
 
@@ -302,7 +303,7 @@ def _points(atlas: Atlas, *, labels_only: bool) -> list[dict]:
 
 def build(args: argparse.Namespace) -> tuple[dict, bytes, bytes, Atlas]:
     """Everything the verb would write: ``(record part, json bytes, block bytes, atlas)``."""
-    json_path, block_path = _targets(args.out)
+    _, block_path = _targets(args.out)
     endpoint_name = _endpoint_name(args.endpoint_name)
     top_k = args.top_k
 
@@ -339,17 +340,23 @@ def build(args: argparse.Namespace) -> tuple[dict, bytes, bytes, Atlas]:
 # --------------------------------------------------------------------------
 
 
+#: The most these files are ever given: owner read/write, group and other read. Never
+#: group or other write -- a served data file has no reason to be writable by anyone else.
+SERVED_FILE_MODE = 0o644
+
+
 def _new_file_mode() -> int:
-    """The mode ``open()`` would give a new file under this process's umask (0644 under 022)."""
+    """:data:`SERVED_FILE_MODE` reduced by this process's umask (0644 under 022, 0600 under 077)."""
     umask = os.umask(0)
     os.umask(umask)
-    return 0o666 & ~umask
+    return SERVED_FILE_MODE & ~umask
 
 
 def _write(json_path: Path, json_bytes: bytes, block_path: Path, block: bytes) -> None:
     # write_atomic creates its temp file with mkstemp, which is always 0600. These two
     # files are meant to be served by a static web server, possibly running as another
-    # user, so each is given the ordinary umask-governed mode once it is in place.
+    # user, so each is made readable (at most 0644, never group or other write, and still
+    # reduced by the umask) once it is in place.
     # _atomic.py is shared with survey and map and is left as it is.
     mode = _new_file_mode()
     try:

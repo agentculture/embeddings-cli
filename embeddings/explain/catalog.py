@@ -440,8 +440,8 @@ contacts the gateway. A write verb: previews by default, `--apply` commits,
 Provenance copies the atlas's model, seed, `limitations`, `uncertain` and
 `params`; any occurrence of the endpoint URL inside them is replaced with
 `<embedding endpoint>`. `provenance.source` is `atlas: <folder name>`, never a
-local path. Both files get the usual umask-governed mode (0644 under 022), so
-a static web server can read them.
+local path. Both files get mode 0644 reduced by the umask (never group or other
+write), so a static web server can read them.
 
 Writing: an existing `.json` is removed first (under `--force`), then the
 `.f32` is written atomically, then the `.json` naming it. A failure at any step

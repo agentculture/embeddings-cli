@@ -276,7 +276,8 @@ def test_atlas_without_vectors_is_refused_with_a_survey_hint(tmp_path: Path, cap
 
 def test_committed_study_without_vectors_is_refused_with_a_survey_hint(tmp_path, capsys):
     study = REPO_ROOT / "docs" / "studies" / "atlas-plain"
-    assert (study / "atlas.json").is_file() and not (study / "vectors.npy").exists()
+    assert (study / "atlas.json").is_file()
+    assert not (study / "vectors.npy").exists()
     rc, err = run(capsys, "--atlas", str(study), "--out", str(tmp_path / "v.json"), "--apply")
     assert rc == 1
     assert "embeddings survey" in err["remediation"]
@@ -376,7 +377,8 @@ def test_endpoint_name_outside_the_allowlist_is_refused(atlas, tmp_path, capsys,
         capsys, "--atlas", str(atlas), "--out", str(tmp_path / "v.json"), f"--endpoint-name={name}"
     )
     assert rc == 1
-    assert "1 to 64" in err["remediation"] and "no dots, colons or slashes" in err["remediation"]
+    assert "1 to 64" in err["remediation"]
+    assert "no dots, colons or slashes" in err["remediation"]
     assert not (tmp_path / "v.json").exists()
 
 
@@ -398,7 +400,8 @@ def test_endpoint_url_inside_copied_provenance_is_redacted(tmp_path: Path, capsy
     out = tmp_path / "v.json"
     assert run(capsys, "--atlas", str(atlas), "--out", str(out), "--apply")[0] == 0
     raw = out.read_text(encoding="utf-8")
-    assert ENDPOINT_HOST not in raw and ENDPOINT_PORT not in raw
+    assert ENDPOINT_HOST not in raw
+    assert ENDPOINT_PORT not in raw
     limitations = json.loads(raw)["provenance"]["limitations"]
     assert len(limitations) == 2  # copied, never dropped
     assert limitations[0] == "embedded through <embedding endpoint> under load"
@@ -509,7 +512,8 @@ def test_top_k_records_directions_kept_and_variance_dropped(tmp_path: Path, caps
     assert check_pair(out) == []
     data, block = load_pair(out)
     red = data["reduction"]
-    assert data["dimension"] == k and block.shape == (count, k)
+    assert data["dimension"] == k
+    assert block.shape == (count, k)
     assert red["kind"] == "top-k"
     assert red["source_dimension"] == dim
     assert red["directions_kept"] == k
@@ -528,8 +532,10 @@ def test_top_k_records_directions_kept_and_variance_dropped(tmp_path: Path, caps
 def test_top_k_must_be_below_the_source_dimension(atlas, tmp_path, capsys, k) -> None:
     rc, err = run(capsys, "--atlas", str(atlas), "--out", str(tmp_path / "v.json"), "--top-k", k)
     assert rc == 1
-    assert "--top-k" in err["message"] and "16-d" in err["message"]
-    assert "--top-k" in err["remediation"] and "16" in err["remediation"]
+    assert "--top-k" in err["message"]
+    assert "16-d" in err["message"]
+    assert "--top-k" in err["remediation"]
+    assert "16" in err["remediation"]
 
 
 def test_rotate_and_top_k_are_exclusive(atlas: Path, tmp_path: Path, capsys) -> None:
@@ -543,7 +549,8 @@ def test_rotate_and_top_k_are_exclusive(atlas: Path, tmp_path: Path, capsys) -> 
     assert "Traceback" not in captured.err
     err = json.loads(captured.err)
     assert err["code"] == 1
-    assert "--top-k" in err["message"] and "--rotate" in err["message"]
+    assert "--top-k" in err["message"]
+    assert "--rotate" in err["message"]
     assert err["remediation"]
 
 
@@ -596,7 +603,11 @@ def test_relative_atlas_path_also_gives_the_folder_name(tmp_path, capsys, monkey
     assert load_pair(tmp_path / "v.json")[0]["provenance"]["source"] == "atlas: atlas-x"
 
 
-@pytest.mark.parametrize("umask,mode", [(0o022, 0o644), (0o027, 0o640), (0o077, 0o600)])
+# Owner read/write, group and other read at most, reduced by the umask. Group or
+# other WRITE is never granted, even under a permissive 002 umask.
+@pytest.mark.parametrize(
+    "umask,mode", [(0o022, 0o644), (0o027, 0o640), (0o077, 0o600), (0o002, 0o644)]
+)
 def test_output_files_get_the_umask_governed_mode(atlas, tmp_path, capsys, umask, mode) -> None:
     out = tmp_path / "v.json"
     old = os.umask(umask)

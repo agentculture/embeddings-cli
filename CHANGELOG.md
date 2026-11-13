@@ -13,7 +13,7 @@ adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 - `--labels-only` leaves the corpus out: labels are the record ids, no metadata is written, and the file states `text_included: false`.
 - `--rotate` is an exact orthogonal rotation onto the set's principal directions (every pairwise distance kept); `--top-k <k>` keeps the first k of them and records `source_dimension`, `directions_kept` and `variance_dropped`. Neither is on unless asked for.
 - `--endpoint-name <name>` writes a route name as `provenance.endpoint`. The Atlas's endpoint URL is never copied — the viewer never lets a gateway address reach a page — and the name must match the contract's allowlist `^[A-Za-z0-9][A-Za-z0-9 _-]{0,63}$` (no dots, colons or slashes, so no hostname, URL or port) or it is refused. Without the flag the field is omitted; an endpoint URL found inside copied provenance strings is replaced with `<embedding endpoint>`.
-- `provenance.source` is `atlas: <folder name>`, never the path as given, so no local absolute path reaches a page; both files get the ordinary umask-governed mode of a new file (0644 under a 022 umask) instead of `write_atomic`'s 0600, so a static web server running as another user can read them.
+- `provenance.source` is `atlas: <folder name>`, never the path as given, so no local absolute path reaches a page; both files get mode 0644 reduced by the umask (never group or other write) instead of `write_atomic`'s 0600, so a static web server running as another user can read them.
 - `tests/_viewer_contract.py` — an independent checker of the viewer's data contract, written in this repo from the contract document.
 
 ## [0.8.1] - 2026-07-20
