@@ -63,9 +63,10 @@ Previews by default and writes nothing; ``--apply`` writes; an existing
 ``.json`` *or* ``.f32`` at the target is refused (exit 1) with a hint naming
 ``--force``. Each file is written through :func:`embeddings._atomic.write_atomic`
 (temp file + ``os.replace``), the block first and the JSON that names it
-second. Each file is atomic on its own; the pair is not one transaction — a run
-killed between the two writes leaves a new block beside the previous JSON (or
-none).
+second, after any existing JSON has been removed. Each file is atomic on its
+own; the pair is not one transaction, but a failure or kill at any step leaves
+either the complete new pair or a block with no JSON -- never a JSON beside a
+block that does not belong to it.
 """
 
 from __future__ import annotations
@@ -149,16 +150,6 @@ def _endpoint_name(raw: str | None) -> str | None:
     return raw
 
 
-def _top_k(raw: int | None) -> int | None:
-    if raw is not None and raw < 1:
-        raise CliError(
-            code=EXIT_USER_ERROR,
-            message=f"--top-k must be at least 1, got {raw}",
-            remediation="pass --top-k <k> with 1 <= k < the atlas's dimension, or drop it",
-        )
-    return raw
-
-
 # --------------------------------------------------------------------------
 # The data set
 # --------------------------------------------------------------------------
@@ -220,13 +211,16 @@ def principal_rotation(matrix: np.ndarray) -> tuple[np.ndarray, np.ndarray]:
 
 def _reduce(matrix: np.ndarray, *, rotate: bool, top_k: int | None) -> tuple[np.ndarray, dict]:
     source_dimension = int(matrix.shape[1])
-    if top_k is not None and top_k >= source_dimension:
+    if top_k is not None and not 1 <= top_k < source_dimension:
         raise CliError(
             code=EXIT_USER_ERROR,
-            message=f"--top-k {top_k} keeps every direction of a {source_dimension}-d atlas",
+            message=(
+                f"--top-k {top_k} is outside 1..{source_dimension - 1} for a "
+                f"{source_dimension}-d atlas"
+            ),
             remediation=(
-                f"pass --top-k below {source_dimension}, or use --rotate for an exact rotation "
-                "that keeps all directions"
+                f"pass --top-k <k> with 1 <= k < {source_dimension}, or use --rotate for an "
+                "exact rotation that keeps all directions"
             ),
         )
     if top_k is None and not rotate:
@@ -234,6 +228,7 @@ def _reduce(matrix: np.ndarray, *, rotate: bool, top_k: int | None) -> tuple[np.
     else:
         coords, variances = principal_rotation(matrix)
         if top_k is None:
+            # Exact by construction (an orthogonal basis); float32 rounding is not counted.
             kind, dropped = "rotation", 0
         else:
             total = float(variances.sum())
@@ -309,7 +304,7 @@ def build(args: argparse.Namespace) -> tuple[dict, bytes, bytes, Atlas]:
     """Everything the verb would write: ``(record part, json bytes, block bytes, atlas)``."""
     json_path, block_path = _targets(args.out)
     endpoint_name = _endpoint_name(args.endpoint_name)
-    top_k = _top_k(args.top_k)
+    top_k = args.top_k
 
     atlas = load_atlas(args)
     matrix = _item_matrix(atlas)
@@ -358,6 +353,12 @@ def _write(json_path: Path, json_bytes: bytes, block_path: Path, block: bytes) -
     # _atomic.py is shared with survey and map and is left as it is.
     mode = _new_file_mode()
     try:
+        # Ordering, so a reader can never load a JSON whose block does not belong to it:
+        # an existing JSON is removed first (only reachable under --force), then the
+        # block lands, then the JSON naming it. A failure at any step leaves either the
+        # full new pair or no JSON at all -- never an old JSON beside a new block, which
+        # would pass every length check when count and dimension are unchanged.
+        json_path.unlink(missing_ok=True)
         write_atomic(block_path, block)
         os.chmod(block_path, mode)
         write_atomic(json_path, json_bytes)
@@ -481,8 +482,9 @@ def register(sub: argparse._SubParsersAction) -> None:
         type=int,
         default=None,
         metavar="<k>",
-        help="Rotate as --rotate, then keep only the first k directions; the file records the "
-        "share of variance dropped. An approximation; off unless given.",
+        help="Implies the rotation: rotate exactly as --rotate does, then keep only the first "
+        "k directions; the file records the share of variance dropped. An approximation; off "
+        "unless given.",
     )
     p.add_argument(
         "--endpoint-name",

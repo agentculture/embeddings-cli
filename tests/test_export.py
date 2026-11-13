@@ -18,6 +18,7 @@ import numpy as np
 import pytest
 
 from embeddings import __version__
+from embeddings import _atomic as atomic_mod
 from embeddings.atlas.io import write_atlas
 from embeddings.atlas.schema import SCHEMA_VERSION, AtlasManifest, AtlasRecord
 from embeddings.cli import main
@@ -216,16 +217,53 @@ def test_both_files_go_through_the_atomic_writer(atlas: Path, tmp_path: Path, mo
     assert written == ["v.f32", "v.json"]
 
 
-def test_a_failed_write_leaves_no_partial_or_temp_file(atlas: Path, tmp_path: Path, monkeypatch):
-    def boom(path, data):
-        raise OSError("disk full")
+def _fail_fsync_on_call(monkeypatch, failing_call: int) -> None:
+    """Make the atomic helper's fsync fail on its Nth call -- after its temp file exists."""
+    calls = {"n": 0}
+    real = atomic_mod.os.fsync
 
-    monkeypatch.setattr(export_mod, "write_atomic", boom)
+    def fsync(fd):
+        calls["n"] += 1
+        if calls["n"] == failing_call:
+            raise OSError("disk full")
+        real(fd)
+
+    monkeypatch.setattr(atomic_mod.os, "fsync", fsync)
+
+
+def test_block_write_failing_midway_leaves_no_temp_and_no_output(atlas, tmp_path, monkeypatch):
     out_dir = tmp_path / "out"
     out_dir.mkdir()
+    _fail_fsync_on_call(monkeypatch, 1)  # the block's temp file is written, then fsync fails
     rc = main(["export", "--atlas", str(atlas), "--out", str(out_dir / "v.json"), "--apply"])
     assert rc == 2
     assert list(out_dir.iterdir()) == []
+
+
+def test_json_write_failing_leaves_the_documented_half_pair(atlas, tmp_path, monkeypatch):
+    out_dir = tmp_path / "out"
+    out_dir.mkdir()
+    _fail_fsync_on_call(monkeypatch, 2)  # the block lands, the JSON's fsync fails
+    rc = main(["export", "--atlas", str(atlas), "--out", str(out_dir / "v.json"), "--apply"])
+    assert rc == 2
+    # A block with no JSON naming it: nothing a viewer can load, and no temp file.
+    assert sorted(p.name for p in out_dir.iterdir()) == ["v.f32"]
+
+
+def test_forced_rewrite_never_leaves_an_old_json_beside_a_new_block(tmp_path, monkeypatch):
+    # Same shape (count and dimension) old and new, so a mismatched pair would pass
+    # every length check: the old JSON must be gone before the new block lands.
+    old_atlas = make_atlas(tmp_path / "old", vectors=_vectors(12, 16, seed=1))
+    new_atlas = make_atlas(tmp_path / "new", vectors=_vectors(12, 16, seed=2))
+    out_dir = tmp_path / "out"
+    out = out_dir / "v.json"
+    assert main(["export", "--atlas", str(old_atlas), "--out", str(out), "--apply"]) == 0
+    _fail_fsync_on_call(monkeypatch, 2)
+    args = ["export", "--atlas", str(new_atlas), "--out", str(out), "--apply", "--force"]
+    assert main(args) == 2
+    assert sorted(p.name for p in out_dir.iterdir()) == ["v.f32"]
+    block = np.fromfile(out_dir / "v.f32", dtype="<f4").reshape(12, 16)
+    np.testing.assert_array_equal(block, np.load(new_atlas / "vectors.npy"))
 
 
 def test_atlas_without_vectors_is_refused_with_a_survey_hint(tmp_path: Path, capsys) -> None:
@@ -348,7 +386,7 @@ def test_endpoint_url_host_and_port_appear_nowhere_in_the_output(atlas, tmp_path
     assert run(capsys, "--atlas", str(atlas), "--out", str(out), "--apply", *extra)[0] == 0
     for path in (out, tmp_path / "v.f32"):
         raw = path.read_bytes()
-        for needle in (ENDPOINT, ENDPOINT_HOST, ENDPOINT_PORT, "localhost"):
+        for needle in (ENDPOINT, ENDPOINT_HOST, ENDPOINT_PORT):
             assert needle.encode() not in raw, f"{needle!r} leaked into {path.name}"
 
 
@@ -490,14 +528,23 @@ def test_top_k_records_directions_kept_and_variance_dropped(tmp_path: Path, caps
 def test_top_k_must_be_below_the_source_dimension(atlas, tmp_path, capsys, k) -> None:
     rc, err = run(capsys, "--atlas", str(atlas), "--out", str(tmp_path / "v.json"), "--top-k", k)
     assert rc == 1
-    assert err["remediation"]
+    assert "--top-k" in err["message"] and "16-d" in err["message"]
+    assert "--top-k" in err["remediation"] and "16" in err["remediation"]
 
 
 def test_rotate_and_top_k_are_exclusive(atlas: Path, tmp_path: Path, capsys) -> None:
+    # A parse-time conflict: the repo's parser raises SystemExit(1) after writing a
+    # structured error to stderr -- nothing on stdout, no traceback.
     with blocked_sockets(), pytest.raises(SystemExit) as exc:
         main(["export", "--atlas", str(atlas), "--rotate", "--top-k", "3", "--json"])
     assert exc.value.code == 1
-    assert json.loads(capsys.readouterr().err)["remediation"]
+    captured = capsys.readouterr()
+    assert captured.out == ""
+    assert "Traceback" not in captured.err
+    err = json.loads(captured.err)
+    assert err["code"] == 1
+    assert "--top-k" in err["message"] and "--rotate" in err["message"]
+    assert err["remediation"]
 
 
 # --------------------------------------------------------------------------

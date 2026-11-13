@@ -427,7 +427,8 @@ contacts the gateway. A write verb: previews by default, `--apply` commits,
   file states `text_included: false`. No corpus text reaches either file.
 - `--rotate` — exact orthogonal rotation of the mean-centred vectors onto their
   principal directions; every pairwise distance is kept.
-- `--top-k <k>` — the same rotation, keeping only the first k directions; the
+- `--top-k <k>` — implies the rotation: it rotates exactly as `--rotate` does,
+  then keeps only the first k directions (1 <= k < the atlas's dimension); the
   file records `source_dimension`, `directions_kept` and `variance_dropped`.
   Off unless given.
 - `--endpoint-name <name>` — a *name* for the embedding route, written as
@@ -441,6 +442,11 @@ Provenance copies the atlas's model, seed, `limitations`, `uncertain` and
 `<embedding endpoint>`. `provenance.source` is `atlas: <folder name>`, never a
 local path. Both files get the usual umask-governed mode (0644 under 022), so
 a static web server can read them.
+
+Writing: an existing `.json` is removed first (under `--force`), then the
+`.f32` is written atomically, then the `.json` naming it. A failure at any step
+leaves the full new pair or a `.f32` with no `.json` (exit 2) — never a `.json`
+beside a block that is not its own.
 """
 
 
