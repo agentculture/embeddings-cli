@@ -10,6 +10,8 @@ from __future__ import annotations
 
 import hashlib
 import json
+import os
+import stat
 from pathlib import Path
 
 import numpy as np
@@ -295,32 +297,48 @@ def test_provenance_copies_model_seed_limitations_uncertain(atlas, tmp_path, cap
     assert prov["uncertain"] == UNCERTAIN
     assert prov["params"] == PARAMS
     assert prov["producer"] == f"embeddings-cli {__version__}"
-    assert prov["source"] == f"atlas: {atlas}"
+    assert prov["source"] == "atlas: atlas"  # the folder's own name, never the path
     assert prov["synthetic"] is False
     assert data["schema_version"] == 1
     assert data["kind"] == "embeddings-tumbler/data"
     assert "endpoint" not in prov  # no --endpoint-name: omitted, never derived from the URL
 
 
-def test_endpoint_name_option_is_written(atlas: Path, tmp_path: Path, capsys) -> None:
+@pytest.mark.parametrize("name", ["lobes gateway", "lobes-gateway", "lobes_gw-2", "A", "x" * 64])
+def test_endpoint_name_option_is_written(atlas: Path, tmp_path: Path, capsys, name: str) -> None:
     out = tmp_path / "v.json"
     args = ["--atlas", str(atlas), "--out", str(out), "--apply"]
-    rc, _ = run(capsys, *args, "--endpoint-name", "lobes gateway")
+    rc, _ = run(capsys, *args, "--endpoint-name", name)
     assert rc == 0
     assert check_pair(out) == []
-    assert load_pair(out)[0]["provenance"]["endpoint"] == "lobes gateway"
+    assert load_pair(out)[0]["provenance"]["endpoint"] == name
 
 
+# The contract's allowlist: ^[A-Za-z0-9][A-Za-z0-9 _-]{0,63}$ -- no dots, colons or slashes.
 @pytest.mark.parametrize(
     "name",
-    ["http://gw/v1", "LocalHost gateway", "10.0.0.7", "gateway:8001", "", "a://b"],
+    [
+        "gateway.internal",  # a bare hostname with a domain (passed the old denylist)
+        "lobes:8001",
+        "http://gw/v1",
+        "10.0.0.7",
+        "gw/v1",
+        "",
+        " lobes",  # must start with a letter or digit
+        "-lobes",
+        "x" * 65,  # 1 to 64 characters
+        "lobes\ngateway",
+        "lobes\tgateway",
+        "gätewäy",  # ASCII only
+    ],
 )
-def test_endpoint_name_that_looks_like_an_address_is_refused(atlas, tmp_path, capsys, name):
+def test_endpoint_name_outside_the_allowlist_is_refused(atlas, tmp_path, capsys, name):
+    # The = form, so a value starting with '-' is not read as a flag.
     rc, err = run(
-        capsys, "--atlas", str(atlas), "--out", str(tmp_path / "v.json"), "--endpoint-name", name
+        capsys, "--atlas", str(atlas), "--out", str(tmp_path / "v.json"), f"--endpoint-name={name}"
     )
     assert rc == 1
-    assert "name" in err["remediation"]
+    assert "1 to 64" in err["remediation"] and "no dots, colons or slashes" in err["remediation"]
     assert not (tmp_path / "v.json").exists()
 
 
@@ -504,3 +522,65 @@ def test_export_leaves_the_atlas_and_map_output_unchanged(tmp_path: Path, capsys
         )
     assert snapshot(atlas) == atlas_before
     assert _map_html(atlas, tmp_path / "map.html") == map_before
+
+
+# --------------------------------------------------------------------------
+# Follow-ups: no local path in provenance, servable file mode
+# --------------------------------------------------------------------------
+
+
+def test_source_names_the_atlas_folder_only(tmp_path: Path, capsys) -> None:
+    atlas = make_atlas(tmp_path / "deep" / "nested" / "atlas-plain")
+    assert atlas.is_absolute()
+    out = tmp_path / "out" / "v.json"
+    assert run(capsys, "--atlas", str(atlas), "--out", str(out), "--apply")[0] == 0
+    assert load_pair(out)[0]["provenance"]["source"] == "atlas: atlas-plain"
+    needles = {str(atlas), str(atlas.parent), str(tmp_path), "deep/nested", str(Path.home())}
+    for path in (out, out.with_suffix(".f32")):
+        raw = path.read_bytes()
+        for needle in needles:
+            assert needle.encode() not in raw, f"{needle!r} leaked into {path.name}"
+
+
+def test_relative_atlas_path_also_gives_the_folder_name(tmp_path, capsys, monkeypatch) -> None:
+    make_atlas(tmp_path / "studies" / "atlas-x")
+    monkeypatch.chdir(tmp_path)
+    assert run(capsys, "--atlas", "studies/atlas-x/", "--out", "v.json", "--apply")[0] == 0
+    assert load_pair(tmp_path / "v.json")[0]["provenance"]["source"] == "atlas: atlas-x"
+
+
+@pytest.mark.parametrize("umask,mode", [(0o022, 0o644), (0o027, 0o640), (0o077, 0o600)])
+def test_output_files_get_the_umask_governed_mode(atlas, tmp_path, capsys, umask, mode) -> None:
+    out = tmp_path / "v.json"
+    old = os.umask(umask)
+    try:
+        rc = run(capsys, "--atlas", str(atlas), "--out", str(out), "--apply")[0]
+    finally:
+        os.umask(old)
+    assert rc == 0
+    for path in (out, tmp_path / "v.f32"):
+        assert stat.S_IMODE(path.stat().st_mode) == mode, path.name
+
+
+def test_force_replacement_also_gets_the_umask_mode(atlas, tmp_path, capsys) -> None:
+    out = tmp_path / "v.json"
+    old = os.umask(0o022)
+    try:
+        run(capsys, "--atlas", str(atlas), "--out", str(out), "--apply")
+        run(capsys, "--atlas", str(atlas), "--out", str(out), "--apply", "--force")
+    finally:
+        os.umask(old)
+    for path in (out, tmp_path / "v.f32"):
+        assert stat.S_IMODE(path.stat().st_mode) == 0o644
+
+
+def test_map_html_mode_is_not_changed_by_export(atlas, tmp_path, capsys) -> None:
+    # map keeps write_atomic's own behaviour; only export adjusts its files.
+    old = os.umask(0o022)
+    try:
+        assert (
+            main(["map", "--atlas", str(atlas), "--html", str(tmp_path / "m.html"), "--apply"]) == 0
+        )
+    finally:
+        os.umask(old)
+    assert stat.S_IMODE((tmp_path / "m.html").stat().st_mode) == 0o600

@@ -29,8 +29,8 @@ SUPPORTED = (1,)
 MAX_SAFE = 9007199254740991
 # "a plain file name": ^[A-Za-z0-9][A-Za-z0-9._-]*$ (contract, "The file form").
 PLAIN_FILE = re.compile(r"^[A-Za-z0-9][A-Za-z0-9._-]*$")
-# endpoint-is-address pattern, case-insensitive (contract, "Provenance").
-ADDRESS = re.compile(r"://|localhost|[0-9]+\.[0-9]+\.[0-9]+\.[0-9]+|:[0-9]+", re.IGNORECASE)
+# provenance.endpoint allowlist (contract, "Provenance"); a miss is endpoint-is-address.
+ENDPOINT_NAME = re.compile(r"[A-Za-z0-9][A-Za-z0-9 _-]{0,63}")
 
 
 def _integer(value: object) -> bool:
@@ -172,7 +172,7 @@ def check(data: object, block: bytes | None) -> list[tuple[str, str]]:
     if not plain:
         faults.append(("vector-file-path", name))
     endpoint = data.get("provenance", {}).get("endpoint")
-    if endpoint is not None and ADDRESS.search(endpoint):
+    if endpoint is not None and ENDPOINT_NAME.fullmatch(endpoint) is None:
         faults.append(("endpoint-is-address", endpoint))
     points = data["points"]
     if len(points) != data["count"]:

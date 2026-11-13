@@ -15,10 +15,12 @@ What is copied, and what is not
   from the Atlas manifest into ``provenance``. ``limitations`` and ``uncertain``
   are copied entry for entry, never dropped.
 * **The Atlas's endpoint URL is never copied.** The viewer's rule is that the
-  embedding gateway's address never reaches a page, and the contract refuses an
-  ``endpoint`` that looks like an address. ``provenance.endpoint`` is a route
-  *name*, taken only from ``--endpoint-name`` and checked against the
-  contract's address pattern; without the option the field is left out (it is
+  embedding gateway's address never reaches a page, so the contract allows
+  ``provenance.endpoint`` only as a route *name* matching
+  ``^[A-Za-z0-9][A-Za-z0-9 _-]{0,63}$`` (ASCII letters, digits, spaces, ``_``
+  and ``-``; 1 to 64 characters; no dots, colons or slashes, so no hostname,
+  URL or port). The name is taken only from ``--endpoint-name`` and checked
+  against that allowlist; without the option the field is left out (it is
   optional). No name is ever derived from the URL. If the URL, its origin, or
   its ``host:port`` appears inside a copied provenance string (a limitation, a
   parameter value), that occurrence is replaced with ``<embedding endpoint>``;
@@ -31,6 +33,11 @@ What is copied, and what is not
   all** (corpus lines carry their extra keys into metadata, and those can be
   text too, so the safe default is to drop it rather than guess which keys are
   harmless), and ``text_included`` is ``false``.
+* ``provenance.source`` is ``atlas: <folder name>`` -- the Atlas folder's own
+  name, never the path as given, so no local absolute path reaches a page.
+* Both files get the ordinary umask-governed mode of a new file (0644 under a
+  022 umask), not ``write_atomic``'s private 0600, because a static web server
+  running as another user must be able to read them.
 * ``provenance.created`` is not written, so the same Atlas and options give a
   byte-identical pair.
 
@@ -65,6 +72,7 @@ from __future__ import annotations
 
 import argparse
 import json
+import os
 import re
 from pathlib import Path
 from urllib.parse import urlsplit
@@ -90,8 +98,8 @@ ENDPOINT_PLACEHOLDER = "<embedding endpoint>"
 
 #: The contract's "plain file name" rule for ``vectors.file``.
 PLAIN_FILE_NAME = re.compile(r"^[A-Za-z0-9][A-Za-z0-9._-]*$")
-#: The contract's ``endpoint-is-address`` pattern (case-insensitive).
-ADDRESS_PATTERN = re.compile(r"://|localhost|[0-9]+\.[0-9]+\.[0-9]+\.[0-9]+|:[0-9]+", re.IGNORECASE)
+#: The contract's allowlist for ``provenance.endpoint``; anything else is ``endpoint-is-address``.
+ENDPOINT_NAME_PATTERN = re.compile(r"[A-Za-z0-9][A-Za-z0-9 _-]{0,63}")
 
 
 # --------------------------------------------------------------------------
@@ -124,17 +132,18 @@ def _targets(out: str) -> tuple[Path, Path]:
 def _endpoint_name(raw: str | None) -> str | None:
     if raw is None:
         return None
-    if not raw.strip() or ADDRESS_PATTERN.search(raw):
+    if ENDPOINT_NAME_PATTERN.fullmatch(raw) is None:
         raise CliError(
             code=EXIT_USER_ERROR,
             message=(
-                f"--endpoint-name {raw!r} is not a route name: the viewer refuses an endpoint "
-                "that is empty or looks like a network address"
+                f"--endpoint-name {raw!r} is not a route name the viewer accepts: it must match "
+                "^[A-Za-z0-9][A-Za-z0-9 _-]{0,63}$"
             ),
             remediation=(
-                "give the route a plain name, for example --endpoint-name 'lobes gateway' "
-                "(no '://', no 'localhost', no IPv4 address, no ':<port>'), or leave the "
-                "option out to omit the endpoint"
+                "give the route a plain name of 1 to 64 ASCII letters, digits, spaces, '_' or "
+                "'-', starting with a letter or digit -- no dots, colons or slashes, so no "
+                "hostname, URL or port -- for example --endpoint-name 'lobes gateway'; or "
+                "leave the option out to omit the endpoint"
             ),
         )
     return raw
@@ -265,11 +274,16 @@ def _endpoint_forms(endpoint: str) -> list[str]:
     return [form for form in sorted(set(forms), key=len, reverse=True) if form]
 
 
+def _atlas_name(path: Path) -> str:
+    """The Atlas folder's own name: a page shows this, so no local path may reach it."""
+    return Path(path).resolve().name or "atlas"
+
+
 def _provenance(atlas: Atlas, endpoint_name: str | None) -> dict:
     manifest = atlas.manifest
     needles = _endpoint_forms(manifest.endpoint)
     provenance: dict[str, object] = {
-        "source": f"atlas: {atlas.path}",
+        "source": f"atlas: {_atlas_name(atlas.path)}",
         "producer": f"embeddings-cli {__version__}",
         "synthetic": False,
         "seed": manifest.seed,
@@ -330,10 +344,24 @@ def build(args: argparse.Namespace) -> tuple[dict, bytes, bytes, Atlas]:
 # --------------------------------------------------------------------------
 
 
+def _new_file_mode() -> int:
+    """The mode ``open()`` would give a new file under this process's umask (0644 under 022)."""
+    umask = os.umask(0)
+    os.umask(umask)
+    return 0o666 & ~umask
+
+
 def _write(json_path: Path, json_bytes: bytes, block_path: Path, block: bytes) -> None:
+    # write_atomic creates its temp file with mkstemp, which is always 0600. These two
+    # files are meant to be served by a static web server, possibly running as another
+    # user, so each is given the ordinary umask-governed mode once it is in place.
+    # _atomic.py is shared with survey and map and is left as it is.
+    mode = _new_file_mode()
     try:
         write_atomic(block_path, block)
+        os.chmod(block_path, mode)
         write_atomic(json_path, json_bytes)
+        os.chmod(json_path, mode)
     except OSError as err:
         raise CliError(
             code=EXIT_ENV_ERROR,
@@ -461,7 +489,8 @@ def register(sub: argparse._SubParsersAction) -> None:
         default=None,
         metavar="<name>",
         help="A name for the embedding route, written as provenance.endpoint (for example "
-        "'lobes gateway'). Never a URL: the atlas's endpoint address is not copied. Omitted "
+        "'lobes gateway'): 1-64 ASCII letters, digits, spaces, '_' or '-', no dots, colons or "
+        "slashes. The atlas's endpoint address is never copied. Omitted "
         "when not given.",
     )
     p.add_argument(

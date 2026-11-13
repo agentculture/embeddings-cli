@@ -431,12 +431,16 @@ contacts the gateway. A write verb: previews by default, `--apply` commits,
   file records `source_dimension`, `directions_kept` and `variance_dropped`.
   Off unless given.
 - `--endpoint-name <name>` — a *name* for the embedding route, written as
-  `provenance.endpoint`. The atlas's endpoint URL is never copied; a value that
-  looks like an address is refused, and without the flag the field is omitted.
+  `provenance.endpoint`: 1 to 64 ASCII letters, digits, spaces, `_` or `-`,
+  starting with a letter or digit (no dots, colons or slashes, so no hostname,
+  URL or port). The atlas's endpoint URL is never copied; any other value is
+  refused, and without the flag the field is omitted.
 
 Provenance copies the atlas's model, seed, `limitations`, `uncertain` and
 `params`; any occurrence of the endpoint URL inside them is replaced with
-`<embedding endpoint>`.
+`<embedding endpoint>`. `provenance.source` is `atlas: <folder name>`, never a
+local path. Both files get the usual umask-governed mode (0644 under 022), so
+a static web server can read them.
 """
 
 
