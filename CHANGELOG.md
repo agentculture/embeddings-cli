@@ -5,6 +5,16 @@ All notable changes to this project will be documented in this file.
 Format follows [Keep a Changelog](https://keepachangelog.com/). This project
 adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.9.0] - 2026-11-13
+
+### Added
+
+- **`embeddings export`** — the producer step for the sibling embeddings-tumbler viewer. Turns a surveyed Atlas with its `vectors.npy` into the viewer's data contract (schema version 1): `<name>.json` plus a little-endian float32 block `<name>.f32` of exactly points x dimension x 4 bytes. Previews by default, writes only with `--apply`, refuses an existing `.json` or `.f32` without `--force`, writes each file atomically, and refuses an Atlas with no vectors with a hint naming `embeddings survey`. Provenance copies the Atlas's model, seed, `limitations`, `uncertain` and `params`.
+- `--labels-only` leaves the corpus out: labels are the record ids, no metadata is written, and the file states `text_included: false`.
+- `--rotate` is an exact orthogonal rotation onto the set's principal directions (every pairwise distance kept); `--top-k <k>` keeps the first k of them and records `source_dimension`, `directions_kept` and `variance_dropped`. Neither is on unless asked for.
+- `--endpoint-name <name>` writes a route name as `provenance.endpoint`. The Atlas's endpoint URL is never copied — the viewer never lets a gateway address reach a page — and a name that looks like an address is refused. Without the flag the field is omitted; an endpoint URL found inside copied provenance strings is replaced with `<embedding endpoint>`.
+- `tests/_viewer_contract.py` — an independent checker of the viewer's data contract, written in this repo from the contract document.
+
 ## [0.8.1] - 2026-07-20
 
 Review triage for PR #3 — Qodo and SonarCloud.

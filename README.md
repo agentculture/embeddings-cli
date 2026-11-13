@@ -38,6 +38,7 @@ embeddings directions discover
 embeddings gaps
 embeddings compare model-a model-b
 embeddings map --html
+embeddings export --out view.json
 ```
 
 The goal is not to assign a human-readable meaning to every dimension. That is
@@ -148,6 +149,7 @@ Shipping today:
 | `compare` | Compare two atlases' k-NN overlap and rank agreement on a shared probe set — never by coordinates. |
 | `gaps` | Report corpus-coverage gaps, and (with `--probe`) what active probing shows about the model. |
 | `map` | PCA-project an atlas to 2-D; `--html` writes a self-contained map artifact. |
+| `export` | Write an atlas and its vectors as an [embeddings-tumbler](https://github.com/agentculture/embeddings-tumbler) viewer data file (`<name>.json` + float32 `<name>.f32`); `--labels-only` leaves the corpus text out, `--rotate` / `--top-k <k>` rotate onto principal directions. The atlas's endpoint URL is never copied — `--endpoint-name` supplies a route name. Dry-run by default; `--apply` commits. |
 
 All originally planned survey-surface verbs are now implemented and listed
 above; nothing remains planned on this surface.

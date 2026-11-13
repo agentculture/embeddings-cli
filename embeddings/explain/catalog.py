@@ -51,6 +51,7 @@ The installed command is `embeddings`.
 - `embeddings compare` — compare two atlases' k-NN and rank agreement on a shared probe set.
 - `embeddings gaps` — find corpus-coverage gaps, and (with `--probe`) model-representation ones.
 - `embeddings map` — PCA-project an atlas to 2-D, optionally writing an HTML artifact.
+- `embeddings export` — write an atlas and its vectors as an embeddings-tumbler viewer data file.
 
 ## Exit-code policy
 
@@ -399,6 +400,46 @@ artifact itself, not just in this doc.
 """
 
 
+_EXPORT = """\
+# embeddings export
+
+Writes a surveyed atlas and its vectors as an **embeddings-tumbler** data set
+(the viewer's data contract, schema version 1): `<name>.json` holding the
+model, dimension, count, provenance, reduction record and one record per point,
+plus `<name>.f32` beside it — every vector as little-endian float32, row-major,
+exactly points x dimension x 4 bytes. Needs the atlas's `vectors.npy`; a
+freshly-cloned study has none, so run `embeddings survey` first. Never
+contacts the gateway. A write verb: previews by default, `--apply` commits,
+`--force` replaces an existing `.json` or `.f32`.
+
+## Usage
+
+    embeddings export --out view.json
+    embeddings export --out view.json --apply
+    embeddings export --out view.json --labels-only --apply
+    embeddings export --out view.json --top-k 64 --endpoint-name "lobes gateway" --apply
+
+## Key flags
+
+- `--out <path>` — the `.json` to write (default `viewer-data.json`); the block
+  goes beside it as `<name>.f32`.
+- `--labels-only` — labels are the record ids, no metadata is written, and the
+  file states `text_included: false`. No corpus text reaches either file.
+- `--rotate` — exact orthogonal rotation of the mean-centred vectors onto their
+  principal directions; every pairwise distance is kept.
+- `--top-k <k>` — the same rotation, keeping only the first k directions; the
+  file records `source_dimension`, `directions_kept` and `variance_dropped`.
+  Off unless given.
+- `--endpoint-name <name>` — a *name* for the embedding route, written as
+  `provenance.endpoint`. The atlas's endpoint URL is never copied; a value that
+  looks like an address is refused, and without the flag the field is omitted.
+
+Provenance copies the atlas's model, seed, `limitations`, `uncertain` and
+`params`; any occurrence of the endpoint URL inside them is replaced with
+`<embedding endpoint>`.
+"""
+
+
 ENTRIES: dict[tuple[str, ...], str] = {
     (): _ROOT,
     ("embeddings-cli",): _ROOT,
@@ -419,4 +460,5 @@ ENTRIES: dict[tuple[str, ...], str] = {
     ("compare",): _COMPARE,
     ("gaps",): _GAPS,
     ("map",): _MAP,
+    ("export",): _EXPORT,
 }
