@@ -38,6 +38,7 @@ _VERBS = [
     "compare — compare two atlases' k-NN and rank agreement on a shared probe set",
     "gaps — find corpus-coverage gaps, plus model-representation gaps via --probe",
     "map — PCA-project an atlas to 2-D, optionally writing an HTML artifact",
+    "export — write an atlas and its vectors as an embeddings-tumbler viewer data file",
 ]
 
 # The survey surface this project was built toward is now fully implemented --

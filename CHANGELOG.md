@@ -5,6 +5,22 @@ All notable changes to this project will be documented in this file.
 Format follows [Keep a Changelog](https://keepachangelog.com/). This project
 adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.9.0] - 2026-11-13
+
+### Added
+
+- **`embeddings export`** — the producer step for the sibling embeddings-tumbler viewer. Turns a surveyed Atlas with its `vectors.npy` into the viewer's data contract (schema version 1): `<name>.json` plus a little-endian float32 block `<name>.f32` of exactly points x dimension x 4 bytes. Previews by default, writes only with `--apply`, refuses an existing `.json` or `.f32` without `--force`, writes each file atomically (under `--force` the old `.json` is removed first, then the block, then the new `.json`, so a failure never leaves a `.json` beside a block that is not its own), and refuses an Atlas with no vectors with a hint naming `embeddings survey`. Provenance copies the Atlas's model, seed, `limitations`, `uncertain` and `params`.
+- `--labels-only` leaves the corpus out: labels are the record ids, no metadata is written, and the file states `text_included: false`.
+- `--group-by <key>` writes each point's `group` from that metadata key (a non-empty string or an integer), so the viewer can colour and name points by group. Records without the key stay ungrouped; a key no record carries is refused; not combinable with `--labels-only`. Without the option no group is written.
+- `provenance.params.corpus` carries only the corpus file's name, never the local path the survey recorded.
+- Endpoint redaction also covers the bare host, `host:port` without credentials and a scheme-less address, ignores case, and no longer replaces a short host name inside a longer word.
+- Both files are staged in full, at their final mode, before anything is removed: a failed forced re-export keeps the old pair, and a failed first export leaves nothing behind.
+- Refused with a plain message instead of writing a file the viewer rejects: NaN or Infinity in metadata or parameters, a seed beyond 2^53 - 1, an empty or non-string record id, an empty model id, and a vector value that overflows float32.
+- `--rotate` is an exact orthogonal rotation onto the set's principal directions (every pairwise distance kept); `--top-k <k>` keeps the first k of them and records `source_dimension`, `directions_kept` and `variance_dropped`. Neither is on unless asked for.
+- `--endpoint-name <name>` writes a route name as `provenance.endpoint`. The Atlas's endpoint URL is never copied — the viewer never lets a gateway address reach a page — and the name must match the contract's allowlist `^[A-Za-z0-9][A-Za-z0-9 _-]{0,63}$` (no dots, colons or slashes, so no hostname, URL or port) or it is refused. Without the flag the field is omitted; an endpoint URL found inside copied provenance strings is replaced with `<embedding endpoint>`.
+- `provenance.source` is `atlas: <folder name>`, never the path as given, so no local absolute path reaches a page; both files get mode 0644 reduced by the umask (never group or other write) instead of `write_atomic`'s 0600, so a static web server running as another user can read them.
+- `tests/_viewer_contract.py` — an independent checker of the viewer's data contract, written in this repo from the contract document.
+
 ## [0.8.1] - 2026-07-20
 
 Review triage for PR #3 — Qodo and SonarCloud.

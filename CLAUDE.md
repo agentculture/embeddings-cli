@@ -32,7 +32,15 @@ interpretation of the space, not the space itself.
 **The survey surface ships.** All seven verbs are implemented, registered, and
 callable — `survey`, `regions`, `neighbors`, `directions discover` /
 `directions overview`, `compare`, `gaps`, `map` — alongside the introspection
-verbs `whoami`, `learn`, `explain`, `overview`, `doctor`, `cli overview`. The
+verbs `whoami`, `learn`, `explain`, `overview`, `doctor`, `cli overview`.
+`export` is the producer step for the sibling
+[`embeddings-tumbler`](https://github.com/agentculture/embeddings-tumbler)
+viewer: it writes an Atlas with its vectors as the viewer's data contract
+(schema version 1, `<name>.json` + float32 `<name>.f32`). It never copies the
+Atlas's endpoint URL — `provenance.endpoint` is a route name from
+`--endpoint-name` or is omitted — and `tests/_viewer_contract.py` is an
+independent checker of that contract written in this repo, not imported from
+the viewer. The
 package persists an Atlas (`embeddings/atlas/`), talks to an embedding gateway
 (`embeddings/backends/`), and measures stability (`embeddings/measure/`).
 

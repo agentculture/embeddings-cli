@@ -87,6 +87,7 @@ def test_walker_finds_the_verbs_known_to_exist_today() -> None:
         "compare",
         "gaps",
         "map",
+        "export",
     ):
         assert expected in discovered, f"walker did not find top-level verb {expected!r}"
 

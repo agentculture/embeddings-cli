@@ -57,6 +57,7 @@ Commands
   embeddings compare             Compare two atlases' k-NN and rank agreement.
   embeddings gaps                Find corpus-coverage and model-representation gaps.
   embeddings map                 Render a 2-D (PCA) map of a surveyed atlas.
+  embeddings export              Write an atlas as an embeddings-tumbler viewer data file.
 
 All commands above are implemented and callable today; nothing on this CLI's
 survey-surface roadmap remains planned.
@@ -123,6 +124,10 @@ def _as_json_payload() -> dict[str, object]:
             {
                 "path": ["map"],
                 "summary": "PCA-project an atlas to 2-D, optionally writing an HTML artifact.",
+            },
+            {
+                "path": ["export"],
+                "summary": "Write an atlas and its vectors as an embeddings-tumbler data file.",
             },
         ],
         # Nothing on this CLI's survey-surface roadmap remains planned -- every
