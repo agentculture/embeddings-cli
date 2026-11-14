@@ -614,9 +614,13 @@ def _render_text(payload: dict) -> str:
             lines.append("re-run with --apply to write the artifact. Nothing was written.")
         lines.append("")
 
-    lines.append(payload["caveat"])
-    lines.append("")
-    lines.append("uncertain (belongs in the atlas manifest's uncertain[]):")
+    lines.extend(
+        [
+            payload["caveat"],
+            "",
+            "uncertain (belongs in the atlas manifest's uncertain[]):",
+        ]
+    )
     lines += [f"- {entry}" for entry in payload["uncertain"]]
     lines.append("")
     lines.append(reproduce_line(payload[REPRODUCED_BY_KEY]))

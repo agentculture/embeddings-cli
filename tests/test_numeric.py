@@ -55,7 +55,8 @@ def test_distances_are_correct_and_bounded() -> None:
     assert distances[0] == pytest.approx(0.0)
     assert distances[1] == pytest.approx(1.0)
     assert distances[2] == pytest.approx(2.0)
-    assert np.all(distances >= 0.0) and np.all(distances <= 2.0)
+    assert np.all(distances >= 0.0)
+    assert np.all(distances <= 2.0)
 
 
 def test_an_identical_vector_never_yields_a_negative_distance() -> None:

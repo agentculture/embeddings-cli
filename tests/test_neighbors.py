@@ -473,7 +473,8 @@ def test_boundary_reports_the_largest_gap_between_b_c_and_c_d(
     assert boundary["gaps"] == pytest.approx(expected_gaps, abs=1e-6)
     assert boundary["largest_gap_index"] == expected_gaps.index(max(expected_gaps))
     assert boundary["largest_gap"] == pytest.approx(max(expected_gaps), abs=1e-6)
-    assert isinstance(boundary["note"], str) and boundary["note"]
+    assert isinstance(boundary["note"], str)
+    assert boundary["note"]
 
 
 def test_boundary_with_fewer_than_two_neighbors_reports_no_gap(

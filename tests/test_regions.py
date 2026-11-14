@@ -332,7 +332,8 @@ def test_single_run_regions_are_unverified_findings_about_the_parameters(
         assert region["stability"]["verdict"] == VERDICT_UNVERIFIED
         assert region["stability"]["score"] is None
         finding = region["finding"]
-        assert isinstance(finding, str) and finding
+        assert isinstance(finding, str)
+        assert finding
         assert "parameters" in finding
         assert "k=3" in finding
         assert "not" in finding

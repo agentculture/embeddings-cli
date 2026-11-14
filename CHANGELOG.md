@@ -5,6 +5,16 @@ All notable changes to this project will be documented in this file.
 Format follows [Keep a Changelog](https://keepachangelog.com/). This project
 adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.9.1] - 2026-11-14
+
+### Added
+
+- CI fails when SonarCloud holds an issue left Open or Confirmed for the pull request or, on main, for the branch (`scripts/sonar_open_issues.py`, run after the scan). An issue marked Accepted does not fail it.
+
+### Fixed
+
+- The 28 SonarCloud issues open on main: composite assertions split in the tests, runs of `append` replaced by `extend` in `gaps`, `map` and `regions`, and the redacted parameters of `export` built as a dict.
+
 ## [0.9.0] - 2026-11-13
 
 ### Added

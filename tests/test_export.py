@@ -383,7 +383,8 @@ def test_a_nan_in_metadata_is_refused_not_written_as_broken_json(tmp_path, capsy
     rc, err = run(capsys, "--atlas", str(target), "--out", str(out), "--apply")
     assert rc == 1
     assert "JSON" in err["message"]
-    assert not out.exists() and not (tmp_path / "v.f32").exists()
+    assert not out.exists()
+    assert not (tmp_path / "v.f32").exists()
 
 
 def test_a_seed_beyond_the_viewers_integer_range_is_refused(tmp_path, capsys) -> None:
@@ -408,8 +409,10 @@ def test_a_value_that_overflows_float32_is_refused(tmp_path, capsys) -> None:
     out = tmp_path / "v.json"
     rc, err = run(capsys, "--atlas", str(target), "--out", str(out), "--apply")
     assert rc == 2
-    assert "doc-2" in err["message"] and "float32" in err["message"]
-    assert not out.exists() and not (tmp_path / "v.f32").exists()
+    assert "doc-2" in err["message"]
+    assert "float32" in err["message"]
+    assert not out.exists()
+    assert not (tmp_path / "v.f32").exists()
 
 
 def test_atlas_without_vectors_is_refused_with_a_survey_hint(tmp_path: Path, capsys) -> None:
@@ -799,7 +802,8 @@ def test_no_group_is_written_without_group_by(atlas: Path, tmp_path: Path, capsy
     out = tmp_path / "v.json"
     rc, payload = run(capsys, "--atlas", str(atlas), "--out", str(out), "--apply")
     assert rc == 0
-    assert payload["group_by"] is None and payload["groups"] == 0
+    assert payload["group_by"] is None
+    assert payload["groups"] == 0
     data, _ = load_pair(out)
     assert all("group" not in point for point in data["points"])
 
@@ -813,7 +817,8 @@ def test_group_by_writes_each_points_group_from_metadata(
     )
     assert rc == 0
     assert payload["group_by"] == "topic"
-    assert payload["groups"] == 3 and payload["grouped_points"] == 12
+    assert payload["groups"] == 3
+    assert payload["grouped_points"] == 12
     assert check_pair(out) == []
     data, _ = load_pair(out)
     assert [point["group"] for point in data["points"]] == [f"topic-{i % 3}" for i in range(12)]
@@ -837,7 +842,8 @@ def test_group_by_leaves_records_without_a_usable_value_ungrouped(tmp_path: Path
         capsys, "--atlas", str(target), "--out", str(out), "--apply", "--group-by", "kind"
     )
     assert rc == 0, payload
-    assert payload["grouped_points"] == 2 and payload["groups"] == 2
+    assert payload["grouped_points"] == 2
+    assert payload["groups"] == 2
     data, _ = load_pair(out)
     assert [point.get("group") for point in data["points"]] == ["alpha", "7"] + [None] * 4
     assert check_pair(out) == []
@@ -850,7 +856,8 @@ def test_group_by_a_key_no_record_carries_is_refused(atlas: Path, tmp_path: Path
     )
     assert rc == 1
     assert "topik" in payload["message"]
-    assert not out.exists() and not (tmp_path / "v.f32").exists()
+    assert not out.exists()
+    assert not (tmp_path / "v.f32").exists()
 
 
 def test_group_by_with_labels_only_is_refused(atlas: Path, tmp_path: Path, capsys) -> None:
@@ -875,6 +882,7 @@ def test_the_corpus_path_is_reduced_to_its_file_name(tmp_path: Path, capsys) -> 
     rc, _ = run(capsys, "--atlas", str(target), "--out", str(out), "--apply")
     assert rc == 0
     raw = out.read_bytes()
-    assert b"someone" not in raw and b"private-project" not in raw
+    assert b"someone" not in raw
+    assert b"private-project" not in raw
     data, _ = load_pair(out)
     assert data["provenance"]["params"]["corpus"] == "corpus.jsonl"

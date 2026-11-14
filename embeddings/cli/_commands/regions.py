@@ -489,9 +489,13 @@ def _render(payload: dict) -> str:
     ]
     for region in payload["regions"]:
         names = ", ".join(item["id"] for item in region["representatives"])
-        lines.append(f"region {region['id']} — {region['size']} items")
-        lines.append(f"  representatives: {names}")
-        lines.append(f"  stability:       {region['stability']['verdict']}")
+        lines.extend(
+            [
+                f"region {region['id']} — {region['size']} items",
+                f"  representatives: {names}",
+                f"  stability:       {region['stability']['verdict']}",
+            ]
+        )
         if region["finding"]:
             lines.append(f"  finding:         {region['finding']}")
         lines.append("")

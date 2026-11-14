@@ -143,10 +143,12 @@ def test_directions_overview_json_returns_the_sections_payload(
 ) -> None:
     payload = _run_json(capsys, ["directions", "overview", "--json"])
     assert payload["subject"] == "embeddings-cli directions"
-    assert isinstance(payload["sections"], list) and payload["sections"]
+    assert isinstance(payload["sections"], list)
+    assert payload["sections"]
     for section in payload["sections"]:
         assert section["title"]
-        assert isinstance(section["items"], list) and section["items"]
+        assert isinstance(section["items"], list)
+        assert section["items"]
 
 
 def test_bare_directions_json_matches_overview_json(capsys: pytest.CaptureFixture[str]) -> None:
@@ -364,7 +366,8 @@ def test_holdout_pairs_are_disjoint_from_the_pairs_the_direction_was_derived_fro
 
     train = {(entry["a"], entry["b"]) for entry in candidate["train"]["pairs_used"]}
     holdout = {(entry["a"], entry["b"]) for entry in candidate["holdout"]["pairs_used"]}
-    assert train and holdout
+    assert train
+    assert holdout
     assert not (train & holdout)
     assert len(train) + len(holdout) == PAIR_COUNT
     assert payload["pairs"]["train"] == len(train)
@@ -432,7 +435,8 @@ def test_a_planted_direction_is_stable_across_seed_reruns(
     payload = _run_json(capsys, _discover(planted_atlas, pairs, "--top", "1", "--runs", "4"))
     stability = payload["candidates"][0]["stability"]
     assert stability["verified"] is True
-    assert stability["score"] is not None and stability["score"] > 0.5
+    assert stability["score"] is not None
+    assert stability["score"] > 0.5
 
 
 # --------------------------------------------------------------------------
