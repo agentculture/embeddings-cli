@@ -247,7 +247,8 @@ def test_short_data_list_raises_cli_error_code_2() -> None:
         client.embed(["hello", "world"])
 
     assert exc_info.value.code == EXIT_ENV_ERROR
-    assert "1" in exc_info.value.message and "2" in exc_info.value.message
+    assert "1" in exc_info.value.message
+    assert "2" in exc_info.value.message
     assert "one embedding per input" in exc_info.value.remediation
 
 
@@ -461,10 +462,12 @@ def test_no_socket_opened_when_transport_is_injected(monkeypatch: pytest.MonkeyP
 
 def test_endpoint_help_text_states_off_machine_implication() -> None:
     lowered = ENDPOINT_HELP.lower()
-    assert "off" in lowered and "machine" in lowered
+    assert "off" in lowered
+    assert "machine" in lowered
     assert DEFAULT_BASE_URL in ENDPOINT_HELP
     assert ENV_BASE_URL in ENDPOINT_HELP
-    assert isinstance(ENDPOINT_FLAG, str) and ENDPOINT_FLAG.startswith("--")
+    assert isinstance(ENDPOINT_FLAG, str)
+    assert ENDPOINT_FLAG.startswith("--")
 
 
 # --------------------------------------------------------------------------

@@ -37,6 +37,21 @@ jobs:
         env:
           SONAR_HOST_URL: https://sonarcloud.io
 
+      # Stricter than the quality gate: any issue left Open or Confirmed fails the run.
+      # An issue marked Accepted on SonarCloud does not. The scan step above waits for
+      # the analysis (sonar.qualitygate.wait), so the issue list is complete here.
+      - name: No open SonarCloud issues
+        if: env.SONAR_TOKEN != ''
+        env:
+          PR_NUMBER: ${{ github.event.pull_request.number }}
+          BRANCH_NAME: ${{ github.ref_name }}
+        run: |
+          if [ -n "$PR_NUMBER" ]; then
+            python3 scripts/sonar_open_issues.py --pull-request "$PR_NUMBER"
+          else
+            python3 scripts/sonar_open_issues.py --branch "$BRANCH_NAME"
+          fi
+
   lint:
     runs-on: ubuntu-latest
     permissions:

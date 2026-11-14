@@ -359,7 +359,7 @@ def _provenance(atlas: Atlas, endpoint_name: str | None) -> dict:
     }
     if endpoint_name is not None:
         provenance["endpoint"] = endpoint_name
-    params = _redact(dict(manifest.params), needles)
+    params = {key: _redact(item, needles) for key, item in manifest.params.items()}
     corpus = params.get("corpus")
     if isinstance(corpus, str) and corpus:
         # The file's own name only (either separator), never the folders above it.

@@ -213,7 +213,8 @@ def test_every_subcommand_invalid_flag_is_a_structured_error_json_mode(
     ), f"'embeddings {' '.join(path)} --json {_BOGUS_FLAG}' leaked a result onto stdout"
     payload = json.loads(captured.err)
     assert payload["code"] == 1
-    assert isinstance(payload["message"], str) and payload["message"]
+    assert isinstance(payload["message"], str)
+    assert payload["message"]
     assert "remediation" in payload
 
 

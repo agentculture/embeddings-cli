@@ -237,7 +237,8 @@ def test_duplicate_ids_are_refused_naming_both_lines(tmp_path) -> None:
         load_corpus(path)
     assert exc.value.code == 1
     # Both the offending line and the first occurrence, so the fix is obvious.
-    assert "3" in exc.value.message and "1" in exc.value.message
+    assert "3" in exc.value.message
+    assert "1" in exc.value.message
     assert "shared" in exc.value.message
     assert "unique" in exc.value.remediation
 

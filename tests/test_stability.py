@@ -369,7 +369,8 @@ def test_unstable_result_is_reported_not_suppressed():
     assert isinstance(result, StabilityResult)
     assert result.verified is True
     assert result.verdict == VERDICT_UNSTABLE
-    assert result.score is not None and result.score < 0.5
+    assert result.score is not None
+    assert result.score < 0.5
     assert result.is_uncertain is True
 
     note = result.uncertain_note("region 3")

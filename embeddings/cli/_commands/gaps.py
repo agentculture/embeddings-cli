@@ -1003,18 +1003,24 @@ def _render(payload: dict) -> str:
         "",
     ]
     for finding in payload["corpus_coverage_findings"]:
-        lines.append(f"- [{finding['type']}] {finding['shows']}")
-        lines.append(f"  does not show: {finding['does_not_show']}")
-        lines.append(f"  asserted: {finding['asserted']} ({finding['stability_verdict']})")
-        lines.append("")
+        lines.extend(
+            [
+                f"- [{finding['type']}] {finding['shows']}",
+                f"  does not show: {finding['does_not_show']}",
+                f"  asserted: {finding['asserted']} ({finding['stability_verdict']})",
+                "",
+            ]
+        )
     if not payload["corpus_coverage_findings"]:
         lines += ["(no area of this atlas met the sparsity or void thresholds above)", ""]
 
-    lines.append(
-        f"## model representation — {payload['counts']['model_representation']} finding(s)"
+    lines.extend(
+        [
+            f"## model representation — {payload['counts']['model_representation']} finding(s)",
+            "   what probing actually showed. Only ever produced by a live probe step.",
+            "",
+        ]
     )
-    lines.append("   what probing actually showed. Only ever produced by a live probe step.")
-    lines.append("")
     if not step["requested"]:
         lines += [
             "no probe step ran (probing is off by default), so no claim about the model is "
@@ -1031,9 +1037,13 @@ def _render(payload: dict) -> str:
         ]
     else:
         for finding in payload["model_representation_findings"]:
-            lines.append(f"- [{finding['verdict']}] {finding['shows']}")
-            lines.append(f"  does not show: {finding['does_not_show']}")
-            lines.append("")
+            lines.extend(
+                [
+                    f"- [{finding['verdict']}] {finding['shows']}",
+                    f"  does not show: {finding['does_not_show']}",
+                    "",
+                ]
+            )
         if not payload["model_representation_findings"]:
             lines += ["(the probe step ran but produced no finding; see inconclusive below)", ""]
 

@@ -580,7 +580,8 @@ def test_probe_flag_without_a_source_is_a_user_error(
 
     assert code == 1
     err = capsys.readouterr().err
-    assert "--probes" in err and "--holdout" in err
+    assert "--probes" in err
+    assert "--holdout" in err
 
 
 def test_missing_probes_file_is_a_user_error(
