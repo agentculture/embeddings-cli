@@ -347,7 +347,9 @@ SERVED_FILE_MODE = 0o644
 
 def _new_file_mode() -> int:
     """:data:`SERVED_FILE_MODE` reduced by this process's umask (0644 under 022, 0600 under 077)."""
-    umask = os.umask(0)
+    # Reading the umask means setting one for an instant. Set the strictest value while
+    # we look (never 0), so a file created in that instant by anything else is private.
+    umask = os.umask(0o077)
     os.umask(umask)
     return SERVED_FILE_MODE & ~umask
 
