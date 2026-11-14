@@ -417,6 +417,7 @@ contacts the gateway. A write verb: previews by default, `--apply` commits,
     embeddings export --out view.json
     embeddings export --out view.json --apply
     embeddings export --out view.json --labels-only --apply
+    embeddings export --out view.json --group-by source --apply
     embeddings export --out view.json --top-k 64 --endpoint-name "lobes gateway" --apply
 
 ## Key flags
@@ -425,6 +426,11 @@ contacts the gateway. A write verb: previews by default, `--apply` commits,
   goes beside it as `<name>.f32`.
 - `--labels-only` — labels are the record ids, no metadata is written, and the
   file states `text_included: false`. No corpus text reaches either file.
+- `--group-by <key>` — write each point's `group` from that metadata key (a
+  non-empty string or an integer); the viewer colours and names points by
+  group. Records without the key stay ungrouped, a key no record carries is
+  refused, and it cannot be combined with `--labels-only`. Without it no group
+  is written.
 - `--rotate` — exact orthogonal rotation of the mean-centred vectors onto their
   principal directions; every pairwise distance is kept.
 - `--top-k <k>` — implies the rotation: it rotates exactly as `--rotate` does,

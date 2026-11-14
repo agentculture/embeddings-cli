@@ -28,7 +28,18 @@ What is copied, and what is not
   rewritten — ``--labels-only`` is the way to leave it out.
 * Each record becomes one point, in record order: ``id``, ``label`` = the
   record's ``text``, ``metadata`` = the record's metadata. Records that share a
-  ``vector_index`` each get their own row. No ``group`` is written.
+  ``vector_index`` each get their own row. No ``group`` is written unless
+  ``--group-by`` names a metadata key.
+* ``--group-by KEY`` writes each point's ``group`` from its record's metadata
+  value under ``KEY`` (the viewer colours and names points by group). Only a
+  non-empty string or an integer is used; a record without one gets no
+  ``group`` (the viewer treats it as ungrouped). A key that no record carries
+  is refused, so a typo cannot silently produce an uncoloured view. Refused
+  together with ``--labels-only``: a metadata value can be corpus text, and
+  that option promises none reaches the file.
+* ``provenance.params.corpus`` is reduced to the corpus file's own name: the
+  survey records the path as given, which is often an absolute local path, and
+  no local path should reach a page.
 * ``--labels-only`` leaves the corpus out: ``label`` = ``id``, **no metadata at
   all** (corpus lines carry their extra keys into metadata, and those can be
   text too, so the safe default is to drop it rather than guess which keys are
@@ -288,17 +299,50 @@ def _provenance(atlas: Atlas, endpoint_name: str | None) -> dict:
     }
     if endpoint_name is not None:
         provenance["endpoint"] = endpoint_name
-    provenance["params"] = _redact(dict(manifest.params), needles)
+    params = _redact(dict(manifest.params), needles)
+    corpus = params.get("corpus")
+    if isinstance(corpus, str) and corpus:
+        # The file's own name only (either separator), never the folders above it.
+        params["corpus"] = corpus.replace("\\", "/").rstrip("/").rsplit("/", 1)[-1]
+    provenance["params"] = params
     return provenance
 
 
-def _points(atlas: Atlas, *, labels_only: bool) -> list[dict]:
+def _group_of(metadata: dict, key: str) -> str | None:
+    """The group named by ``metadata[key]``: a non-empty string or an integer, else ``None``."""
+    value = metadata.get(key)
+    if isinstance(value, bool):
+        return None
+    if isinstance(value, int):
+        return str(value)
+    if isinstance(value, str) and value.strip():
+        return value
+    return None
+
+
+def _points(atlas: Atlas, *, labels_only: bool, group_by: str | None = None) -> list[dict]:
     if labels_only:
         return [{"id": record.id, "label": record.id} for record in atlas.records]
-    return [
-        {"id": record.id, "label": record.text, "metadata": dict(record.metadata)}
-        for record in atlas.records
-    ]
+    points = []
+    grouped = 0
+    for record in atlas.records:
+        point = {"id": record.id, "label": record.text}
+        group = _group_of(record.metadata, group_by) if group_by is not None else None
+        if group is not None:
+            point["group"] = group
+            grouped += 1
+        point["metadata"] = dict(record.metadata)
+        points.append(point)
+    if group_by is not None and grouped == 0:
+        raise CliError(
+            code=EXIT_USER_ERROR,
+            message=f"--group-by {group_by!r}: no record has a usable value under that key",
+            remediation=(
+                "name a metadata key the corpus lines carry (a non-empty string or an integer "
+                "value); `embeddings export` without --group-by writes no groups"
+            ),
+        )
+    return points
 
 
 def build(args: argparse.Namespace) -> tuple[dict, bytes, bytes, Atlas]:
@@ -306,6 +350,16 @@ def build(args: argparse.Namespace) -> tuple[dict, bytes, bytes, Atlas]:
     _, block_path = _targets(args.out)
     endpoint_name = _endpoint_name(args.endpoint_name)
     top_k = args.top_k
+
+    if getattr(args, "group_by", None) is not None and args.labels_only:
+        raise CliError(
+            code=EXIT_USER_ERROR,
+            message="--group-by cannot be combined with --labels-only",
+            remediation=(
+                "a metadata value can be corpus text, and --labels-only promises that none "
+                "reaches the file; drop one of the two options"
+            ),
+        )
 
     atlas = load_atlas(args)
     matrix = _item_matrix(atlas)
@@ -329,7 +383,9 @@ def build(args: argparse.Namespace) -> tuple[dict, bytes, bytes, Atlas]:
             "byte_order": "little",
             "byte_length": count * dimension * 4,
         },
-        "points": _points(atlas, labels_only=bool(args.labels_only)),
+        "points": _points(
+            atlas, labels_only=bool(args.labels_only), group_by=getattr(args, "group_by", None)
+        ),
     }
     text = json.dumps(data, ensure_ascii=False, separators=(",", ":")) + "\n"
     return data, text.encode("utf-8"), block, atlas
@@ -400,6 +456,12 @@ def _render_text(payload: dict) -> str:
         f"reduction:     {reduction_line}",
         f"text included: {'yes' if payload['text_included'] else 'no (labels-only)'}",
         f"endpoint name: {payload['endpoint_name'] or '(omitted)'}",
+        (
+            f"groups:        {payload['groups']} from metadata key {payload['group_by']!r} "
+            f"({payload['grouped_points']} of {payload['points']} points grouped)"
+            if payload["group_by"] is not None
+            else "groups:        none (--group-by not given)"
+        ),
         f"data file:     {files['json']['path']} ({files['json']['bytes']} bytes)",
         f"vector block:  {files['block']['path']} ({files['block']['bytes']} bytes)",
         "",
@@ -441,6 +503,9 @@ def cmd_export(args: argparse.Namespace) -> int:
         "reduction": data["reduction"],
         "text_included": data["text_included"],
         "endpoint_name": data["provenance"].get("endpoint"),
+        "group_by": getattr(args, "group_by", None),
+        "grouped_points": sum(1 for point in data["points"] if "group" in point),
+        "groups": len({point["group"] for point in data["points"] if "group" in point}),
         "files": {
             "json": {"path": str(json_path), "bytes": len(json_bytes)},
             "block": {"path": str(block_path), "bytes": len(block)},
@@ -478,6 +543,14 @@ def register(sub: argparse._SubParsersAction) -> None:
         action="store_true",
         help="Leave the corpus out: labels are the record ids, no metadata is written, and "
         "the file states text_included: false.",
+    )
+    p.add_argument(
+        "--group-by",
+        default=None,
+        metavar="<key>",
+        help="Write each point's group from this metadata key (a non-empty string or an "
+        "integer value); the viewer colours and names points by group. Records without the "
+        "key stay ungrouped; a key no record carries is refused. Not with --labels-only.",
     )
     reduction = p.add_mutually_exclusive_group()
     reduction.add_argument(

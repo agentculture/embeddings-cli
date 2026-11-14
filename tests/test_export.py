@@ -642,3 +642,93 @@ def test_map_html_mode_is_not_changed_by_export(atlas, tmp_path, capsys) -> None
     finally:
         os.umask(old)
     assert stat.S_IMODE((tmp_path / "m.html").stat().st_mode) == 0o600
+
+
+# --------------------------------------------------------------------------
+# Groups (--group-by) and the corpus path
+# --------------------------------------------------------------------------
+
+
+def test_no_group_is_written_without_group_by(atlas: Path, tmp_path: Path, capsys) -> None:
+    out = tmp_path / "v.json"
+    rc, payload = run(capsys, "--atlas", str(atlas), "--out", str(out), "--apply")
+    assert rc == 0
+    assert payload["group_by"] is None and payload["groups"] == 0
+    data, _ = load_pair(out)
+    assert all("group" not in point for point in data["points"])
+
+
+def test_group_by_writes_each_points_group_from_metadata(
+    atlas: Path, tmp_path: Path, capsys
+) -> None:
+    out = tmp_path / "v.json"
+    rc, payload = run(
+        capsys, "--atlas", str(atlas), "--out", str(out), "--apply", "--group-by", "topic"
+    )
+    assert rc == 0
+    assert payload["group_by"] == "topic"
+    assert payload["groups"] == 3 and payload["grouped_points"] == 12
+    assert check_pair(out) == []
+    data, _ = load_pair(out)
+    assert [point["group"] for point in data["points"]] == [f"topic-{i % 3}" for i in range(12)]
+    # Metadata is still copied whole; the group is an extra field, not a move.
+    assert all(point["metadata"]["topic"] == point["group"] for point in data["points"])
+
+
+def test_group_by_leaves_records_without_a_usable_value_ungrouped(tmp_path: Path, capsys) -> None:
+    from embeddings.atlas.io import read_atlas
+
+    target = make_atlas(tmp_path / "atlas", count=6)
+    loaded = read_atlas(target)
+    values = ["alpha", 7, "", "   ", True, None]
+    for record, value in zip(loaded.records, values):
+        record.metadata.clear()
+        if value is not None:
+            record.metadata["kind"] = value
+    write_atlas(loaded.manifest, loaded.records, _vectors(6, 16), path=target, overwrite=True)
+    out = tmp_path / "v.json"
+    rc, payload = run(
+        capsys, "--atlas", str(target), "--out", str(out), "--apply", "--group-by", "kind"
+    )
+    assert rc == 0, payload
+    assert payload["grouped_points"] == 2 and payload["groups"] == 2
+    data, _ = load_pair(out)
+    assert [point.get("group") for point in data["points"]] == ["alpha", "7"] + [None] * 4
+    assert check_pair(out) == []
+
+
+def test_group_by_a_key_no_record_carries_is_refused(atlas: Path, tmp_path: Path, capsys) -> None:
+    out = tmp_path / "v.json"
+    rc, payload = run(
+        capsys, "--atlas", str(atlas), "--out", str(out), "--apply", "--group-by", "topik"
+    )
+    assert rc == 1
+    assert "topik" in payload["message"]
+    assert not out.exists() and not (tmp_path / "v.f32").exists()
+
+
+def test_group_by_with_labels_only_is_refused(atlas: Path, tmp_path: Path, capsys) -> None:
+    out = tmp_path / "v.json"
+    rc, payload = run(
+        capsys, "--atlas", str(atlas), "--out", str(out), "--apply", "--labels-only",
+        "--group-by", "topic",
+    )  # fmt: skip
+    assert rc == 1
+    assert "--labels-only" in payload["message"]
+    assert not out.exists()
+
+
+def test_the_corpus_path_is_reduced_to_its_file_name(tmp_path: Path, capsys) -> None:
+    from embeddings.atlas.io import read_atlas
+
+    target = make_atlas(tmp_path / "atlas", count=4)
+    loaded = read_atlas(target)
+    loaded.manifest.params["corpus"] = "/home/someone/private-project/data/corpus.jsonl"
+    write_atlas(loaded.manifest, loaded.records, _vectors(4, 16), path=target, overwrite=True)
+    out = tmp_path / "v.json"
+    rc, _ = run(capsys, "--atlas", str(target), "--out", str(out), "--apply")
+    assert rc == 0
+    raw = out.read_bytes()
+    assert b"someone" not in raw and b"private-project" not in raw
+    data, _ = load_pair(out)
+    assert data["provenance"]["params"]["corpus"] == "corpus.jsonl"
