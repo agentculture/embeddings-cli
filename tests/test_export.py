@@ -201,20 +201,29 @@ def test_force_replaces_both_files(atlas: Path, tmp_path: Path, capsys) -> None:
     assert check_pair(out) == []
 
 
-def test_both_files_go_through_the_atomic_writer(atlas: Path, tmp_path: Path, monkeypatch):
-    written: list[str] = []
-    real = export_mod.write_atomic
+def _record_replaces(monkeypatch, fail_on: int | None = None) -> list[str]:
+    """Record every os.replace target name; optionally make the Nth one fail."""
+    landed: list[str] = []
+    real = export_mod.os.replace
 
-    def spy(path, data):
-        written.append(Path(path).name)
-        real(path, data)
+    def replace(src, dst):
+        if fail_on is not None and len(landed) + 1 == fail_on:
+            landed.append("FAILED " + Path(dst).name)
+            raise OSError("disk full")
+        landed.append(Path(dst).name)
+        real(src, dst)
 
-    monkeypatch.setattr(export_mod, "write_atomic", spy)
-    assert (
-        main(["export", "--atlas", str(atlas), "--out", str(tmp_path / "v.json"), "--apply"]) == 0
-    )
-    # The block first, then the JSON that names it.
-    assert written == ["v.f32", "v.json"]
+    monkeypatch.setattr(export_mod.os, "replace", replace)
+    return landed
+
+
+def test_both_files_are_staged_then_renamed_block_first(atlas: Path, tmp_path: Path, monkeypatch):
+    landed = _record_replaces(monkeypatch)
+    out_dir = tmp_path / "out"
+    assert main(["export", "--atlas", str(atlas), "--out", str(out_dir / "v.json"), "--apply"]) == 0
+    # The block first, then the JSON that names it; no temp file is left.
+    assert landed == ["v.f32", "v.json"]
+    assert sorted(p.name for p in out_dir.iterdir()) == ["v.f32", "v.json"]
 
 
 def _fail_fsync_on_call(monkeypatch, failing_call: int) -> None:
@@ -240,14 +249,40 @@ def test_block_write_failing_midway_leaves_no_temp_and_no_output(atlas, tmp_path
     assert list(out_dir.iterdir()) == []
 
 
-def test_json_write_failing_leaves_the_documented_half_pair(atlas, tmp_path, monkeypatch):
+def test_json_staging_failing_leaves_nothing_behind(atlas, tmp_path, monkeypatch):
     out_dir = tmp_path / "out"
     out_dir.mkdir()
-    _fail_fsync_on_call(monkeypatch, 2)  # the block lands, the JSON's fsync fails
+    _fail_fsync_on_call(monkeypatch, 2)  # the block is staged, the JSON's fsync fails
     rc = main(["export", "--atlas", str(atlas), "--out", str(out_dir / "v.json"), "--apply"])
     assert rc == 2
-    # A block with no JSON naming it: nothing a viewer can load, and no temp file.
-    assert sorted(p.name for p in out_dir.iterdir()) == ["v.f32"]
+    # Nothing had taken its final name yet, so nothing is left: the same command can be
+    # run again without --force.
+    assert list(out_dir.iterdir()) == []
+
+
+def test_json_rename_failing_on_a_first_export_removes_the_lone_block(atlas, tmp_path, monkeypatch):
+    out_dir = tmp_path / "out"
+    landed = _record_replaces(monkeypatch, fail_on=2)
+    rc = main(["export", "--atlas", str(atlas), "--out", str(out_dir / "v.json"), "--apply"])
+    assert rc == 2
+    assert landed == ["v.f32", "FAILED v.json"]
+    assert list(out_dir.iterdir()) == []
+
+
+def test_forced_rewrite_that_cannot_be_staged_keeps_the_old_pair(tmp_path, monkeypatch):
+    # A full disk shows up while the new files are staged, before anything is removed.
+    old_atlas = make_atlas(tmp_path / "old", vectors=_vectors(12, 16, seed=1))
+    new_atlas = make_atlas(tmp_path / "new", vectors=_vectors(12, 16, seed=2))
+    out_dir = tmp_path / "out"
+    out = out_dir / "v.json"
+    assert main(["export", "--atlas", str(old_atlas), "--out", str(out), "--apply"]) == 0
+    before = snapshot(out_dir)
+    for failing in (1, 2):
+        _fail_fsync_on_call(monkeypatch, failing)
+        args = ["export", "--atlas", str(new_atlas), "--out", str(out), "--apply", "--force"]
+        assert main(args) == 2
+        assert snapshot(out_dir) == before
+    assert check_pair(out) == []
 
 
 def test_forced_rewrite_never_leaves_an_old_json_beside_a_new_block(tmp_path, monkeypatch):
@@ -258,12 +293,123 @@ def test_forced_rewrite_never_leaves_an_old_json_beside_a_new_block(tmp_path, mo
     out_dir = tmp_path / "out"
     out = out_dir / "v.json"
     assert main(["export", "--atlas", str(old_atlas), "--out", str(out), "--apply"]) == 0
-    _fail_fsync_on_call(monkeypatch, 2)
+    _record_replaces(monkeypatch, fail_on=2)  # the block takes its name, the JSON does not
     args = ["export", "--atlas", str(new_atlas), "--out", str(out), "--apply", "--force"]
     assert main(args) == 2
     assert sorted(p.name for p in out_dir.iterdir()) == ["v.f32"]
     block = np.fromfile(out_dir / "v.f32", dtype="<f4").reshape(12, 16)
     np.testing.assert_array_equal(block, np.load(new_atlas / "vectors.npy"))
+
+
+# --------------------------------------------------------------------------
+# Review findings: redaction forms, strict JSON, contract limits, float32 overflow
+# --------------------------------------------------------------------------
+
+
+@pytest.mark.parametrize(
+    "endpoint,text,leaks",
+    [
+        ("http://gpu-box.internal:8002/v1", "gpu-box.internal was under load", "gpu-box"),
+        ("http://gpu-box.internal:8002/v1", "GPU-BOX.internal:8002 timed out", "GPU-BOX"),
+        ("http://user:key@gate.internal:8002/v1", "retry against gate.internal:8002", "gate."),
+        ("http://user:key@gate.internal:8002/v1", "see user:key@gate.internal:8002", "key@"),
+        ("gateway.internal:8001/v1", "gateway.internal was slow", "gateway.internal"),
+    ],
+)
+def test_every_form_of_the_endpoint_is_redacted(tmp_path, capsys, endpoint, text, leaks) -> None:
+    from embeddings.atlas.io import read_atlas
+
+    target = make_atlas(tmp_path / "atlas", count=4, limitations=[text])
+    loaded = read_atlas(target)
+    manifest = AtlasManifest(
+        schema_version=loaded.manifest.schema_version, model=loaded.manifest.model,
+        endpoint=endpoint, params=dict(loaded.manifest.params), seed=loaded.manifest.seed,
+        limitations=list(loaded.manifest.limitations), uncertain=list(loaded.manifest.uncertain),
+    )  # fmt: skip
+    write_atlas(manifest, loaded.records, _vectors(4, 16), path=target, overwrite=True)
+    out = tmp_path / "v.json"
+    rc, _ = run(capsys, "--atlas", str(target), "--out", str(out), "--apply")
+    assert rc == 0
+    data, _ = load_pair(out)
+    assert leaks not in json.dumps(data["provenance"])
+    assert export_mod.ENDPOINT_PLACEHOLDER in data["provenance"]["limitations"][0]
+
+
+def test_a_short_host_name_is_not_replaced_inside_other_words(tmp_path, capsys) -> None:
+    from embeddings.atlas.io import read_atlas
+
+    target = make_atlas(
+        tmp_path / "atlas", count=4, limitations=["protein corpus sampled unevenly; tei was slow"]
+    )
+    loaded = read_atlas(target)
+    manifest = AtlasManifest(
+        schema_version=loaded.manifest.schema_version, model=loaded.manifest.model,
+        endpoint="http://tei/v1", params={"corpus": "/data/steins.jsonl"},
+        seed=loaded.manifest.seed, limitations=list(loaded.manifest.limitations),
+        uncertain=list(loaded.manifest.uncertain),
+    )  # fmt: skip
+    write_atlas(manifest, loaded.records, _vectors(4, 16), path=target, overwrite=True)
+    out = tmp_path / "v.json"
+    rc, _ = run(capsys, "--atlas", str(target), "--out", str(out), "--apply")
+    assert rc == 0
+    data, _ = load_pair(out)
+    assert data["provenance"]["limitations"] == [
+        f"protein corpus sampled unevenly; {export_mod.ENDPOINT_PLACEHOLDER} was slow"
+    ]
+    assert data["provenance"]["params"]["corpus"] == "steins.jsonl"
+
+
+def _rewrite(target: Path, *, seed=None, mutate=None, vectors=None) -> None:
+    from embeddings.atlas.io import read_atlas
+
+    loaded = read_atlas(target)
+    manifest = loaded.manifest
+    if seed is not None:
+        manifest = AtlasManifest(
+            schema_version=manifest.schema_version, model=manifest.model,
+            endpoint=manifest.endpoint, params=dict(manifest.params), seed=seed,
+            limitations=list(manifest.limitations), uncertain=list(manifest.uncertain),
+        )  # fmt: skip
+    if mutate is not None:
+        mutate(loaded.records)
+    data = vectors if vectors is not None else np.load(target / "vectors.npy")
+    write_atlas(manifest, loaded.records, data, path=target, overwrite=True)
+
+
+def test_a_nan_in_metadata_is_refused_not_written_as_broken_json(tmp_path, capsys) -> None:
+    target = make_atlas(tmp_path / "atlas", count=4)
+    _rewrite(target, mutate=lambda records: records[1].metadata.update(score=float("nan")))
+    out = tmp_path / "v.json"
+    rc, err = run(capsys, "--atlas", str(target), "--out", str(out), "--apply")
+    assert rc == 1
+    assert "JSON" in err["message"]
+    assert not out.exists() and not (tmp_path / "v.f32").exists()
+
+
+def test_a_seed_beyond_the_viewers_integer_range_is_refused(tmp_path, capsys) -> None:
+    target = make_atlas(tmp_path / "atlas", count=4)
+    _rewrite(target, seed=2**53)
+    out = tmp_path / "v.json"
+    rc, err = run(capsys, "--atlas", str(target), "--out", str(out), "--apply")
+    assert rc == 1
+    assert "seed" in err["message"]
+    assert not out.exists()
+    _rewrite(target, seed=2**53 - 1)
+    rc, _ = run(capsys, "--atlas", str(target), "--out", str(out), "--apply")
+    assert rc == 0
+    assert check_pair(out) == []
+
+
+def test_a_value_that_overflows_float32_is_refused(tmp_path, capsys) -> None:
+    target = make_atlas(tmp_path / "atlas", count=4)
+    big = _vectors(4, 16).astype(np.float64)
+    big[2, 5] = 1e39  # finite as float64, infinite as float32
+    _rewrite(target, vectors=big)
+    out = tmp_path / "v.json"
+    rc, err = run(capsys, "--atlas", str(target), "--out", str(out), "--apply")
+    assert rc == 2
+    assert "doc-2" in err["message"] and "float32" in err["message"]
+    assert not out.exists() and not (tmp_path / "v.f32").exists()
 
 
 def test_atlas_without_vectors_is_refused_with_a_survey_hint(tmp_path: Path, capsys) -> None:

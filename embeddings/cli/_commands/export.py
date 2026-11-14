@@ -47,7 +47,7 @@ What is copied, and what is not
 * ``provenance.source`` is ``atlas: <folder name>`` -- the Atlas folder's own
   name, never the path as given, so no local absolute path reaches a page.
 * Both files get mode 0644 reduced by the umask (0644 under 022, 0640 under
-  027, never group or other write), not ``write_atomic``'s private 0600,
+  027, never group or other write), not a temp file's private 0600,
   because a static web server running as another user must be able to read
   them.
 * ``provenance.created`` is not written, so the same Atlas and options give a
@@ -73,12 +73,14 @@ Write gating
 ------------
 Previews by default and writes nothing; ``--apply`` writes; an existing
 ``.json`` *or* ``.f32`` at the target is refused (exit 1) with a hint naming
-``--force``. Each file is written through :func:`embeddings._atomic.write_atomic`
-(temp file + ``os.replace``), the block first and the JSON that names it
-second, after any existing JSON has been removed. Each file is atomic on its
-own; the pair is not one transaction, but a failure or kill at any step leaves
-either the complete new pair or a block with no JSON -- never a JSON beside a
-block that does not belong to it.
+``--force``. Both files are first written in full to temp files beside their
+targets (synced, and already at their final mode), so a full disk or an
+unwritable folder is found before anything is removed. Then any existing JSON
+is removed, the block takes its name, and the JSON that names it takes its
+name. The pair is not one transaction, but a failure or kill at any step leaves
+the old pair, the complete new pair, or a block with no JSON -- never a JSON
+beside a block that does not belong to it. A first export whose JSON cannot
+take its name removes the block it just placed, so the command can be re-run.
 """
 
 from __future__ import annotations
@@ -87,13 +89,13 @@ import argparse
 import json
 import os
 import re
+import tempfile
 from pathlib import Path
 from urllib.parse import urlsplit
 
 import numpy as np
 
 from embeddings import __version__
-from embeddings._atomic import write_atomic
 from embeddings.atlas.io import Atlas
 from embeddings.cli._commands._atlas_arg import add_atlas_argument, load_atlas
 from embeddings.cli._errors import EXIT_ENV_ERROR, EXIT_USER_ERROR, CliError
@@ -108,6 +110,9 @@ DEFAULT_OUT = "viewer-data.json"
 BLOCK_SUFFIX = ".f32"
 #: What a redacted endpoint occurrence inside copied provenance becomes.
 ENDPOINT_PLACEHOLDER = "<embedding endpoint>"
+
+#: The largest integer the viewer's contract accepts (2^53 - 1), in absolute value.
+MAX_SAFE_INTEGER = 2**53 - 1
 
 #: The contract's "plain file name" rule for ``vectors.file``.
 PLAIN_FILE_NAME = re.compile(r"^[A-Za-z0-9][A-Za-z0-9._-]*$")
@@ -175,8 +180,34 @@ def _item_matrix(atlas: Atlas) -> np.ndarray:
             message=f"the atlas at {atlas.path} contains no records -- there is nothing to export",
             remediation="re-run `embeddings survey <corpus> --apply` with a non-empty corpus",
         )
+    model = atlas.manifest.model
+    if not isinstance(model, str) or not model.strip():
+        raise CliError(
+            code=EXIT_ENV_ERROR,
+            message=f"the atlas at {atlas.path} records no model id; the viewer needs one",
+            remediation="re-run `embeddings survey <corpus> --apply --force` to rebuild the atlas",
+        )
+    seed = atlas.manifest.seed
+    if seed is not None and (
+        isinstance(seed, bool) or not isinstance(seed, int) or abs(seed) > MAX_SAFE_INTEGER
+    ):
+        raise CliError(
+            code=EXIT_USER_ERROR,
+            message=f"the atlas at {atlas.path} records seed {seed!r}; the viewer accepts an "
+            f"integer of at most {MAX_SAFE_INTEGER} in size",
+            remediation="re-run `embeddings survey <corpus> --seed <n> --apply --force` with a "
+            "smaller integer seed",
+        )
     seen: set[str] = set()
     for record in atlas.records:
+        if not isinstance(record.id, str) or not record.id:
+            raise CliError(
+                code=EXIT_USER_ERROR,
+                message=f"the atlas at {atlas.path} has a record whose id is {record.id!r}; "
+                "the viewer needs each id to be a non-empty string",
+                remediation="give each corpus item a non-empty string id and re-run "
+                "`embeddings survey`",
+            )
         if record.id in seen:
             raise CliError(
                 code=EXIT_USER_ERROR,
@@ -256,12 +287,27 @@ def _reduce(matrix: np.ndarray, *, rotate: bool, top_k: int | None) -> tuple[np.
     }
 
 
-def _redact(value: object, needles: list[str]) -> object:
+def _needle_pattern(needles: list[str]) -> re.Pattern[str] | None:
+    """One pattern for every endpoint form: case-insensitive, and never inside a longer word.
+
+    A form matches only when it is not glued to a letter or digit on either side, so a
+    short host name such as ``tei`` is replaced where it stands alone but not inside
+    ``protein``.
+    """
+    if not needles:
+        return None
+    body = "|".join(re.escape(needle) for needle in needles)
+    return re.compile(rf"(?<![A-Za-z0-9])(?:{body})(?![A-Za-z0-9])", re.IGNORECASE)
+
+
+def _redact(value: object, needles: list[str] | re.Pattern[str] | None) -> object:
     """Replace each endpoint form in every string inside ``value`` (lists, dicts, scalars)."""
-    if isinstance(value, str):
-        for needle in needles:
-            value = value.replace(needle, ENDPOINT_PLACEHOLDER)
+    if isinstance(needles, list):
+        needles = _needle_pattern(needles)
+    if needles is None:
         return value
+    if isinstance(value, str):
+        return needles.sub(ENDPOINT_PLACEHOLDER, value)
     if isinstance(value, list):
         return [_redact(item, needles) for item in value]
     if isinstance(value, dict):
@@ -270,14 +316,28 @@ def _redact(value: object, needles: list[str]) -> object:
 
 
 def _endpoint_forms(endpoint: str) -> list[str]:
-    """The URL, its origin, and its host:port — longest first, empty ones dropped."""
+    """Every way the endpoint can be written: longest first, empty ones dropped.
+
+    The URL as recorded, its origin, its ``netloc`` (which may carry ``user:password@``),
+    ``host:port`` without credentials, and the bare host. An address recorded without a
+    scheme (``gateway.internal:8001/v1``) is parsed as if it had one, so its host forms
+    are found too.
+    """
     forms = [endpoint]
-    try:
-        parts = urlsplit(endpoint)
-    except ValueError:
-        parts = None
-    if parts is not None and parts.netloc:
-        forms += [f"{parts.scheme}://{parts.netloc}", parts.netloc]
+    for candidate in (endpoint, "//" + endpoint):
+        try:
+            parts = urlsplit(candidate)
+            host, port = parts.hostname, parts.port
+        except ValueError:
+            continue
+        if not parts.netloc or not host:
+            continue
+        if parts.scheme:
+            forms.append(f"{parts.scheme}://{parts.netloc}")
+        forms += [parts.netloc, host]
+        if port is not None:
+            forms.append(f"{host}:{port}")
+        break
     return [form for form in sorted(set(forms), key=len, reverse=True) if form]
 
 
@@ -364,7 +424,19 @@ def build(args: argparse.Namespace) -> tuple[dict, bytes, bytes, Atlas]:
     atlas = load_atlas(args)
     matrix = _item_matrix(atlas)
     coords, reduction = _reduce(matrix, rotate=bool(args.rotate), top_k=top_k)
-    block = np.ascontiguousarray(coords, dtype="<f4").tobytes()
+    with np.errstate(over="ignore"):
+        packed = np.ascontiguousarray(coords, dtype="<f4")
+    finite = np.isfinite(packed).all(axis=1)
+    if not finite.all():
+        bad = atlas.records[int(np.argmin(finite))].id
+        raise CliError(
+            code=EXIT_ENV_ERROR,
+            message=f'the vector of record "{bad}" in {atlas.path} does not fit a float32 '
+            "(a value overflows to infinity)",
+            remediation="re-run `embeddings survey <corpus> --apply --force` to rebuild the "
+            "vectors",
+        )
+    block = packed.tobytes()
     count, dimension = int(coords.shape[0]), int(coords.shape[1])
 
     data = {
@@ -387,8 +459,23 @@ def build(args: argparse.Namespace) -> tuple[dict, bytes, bytes, Atlas]:
             atlas, labels_only=bool(args.labels_only), group_by=getattr(args, "group_by", None)
         ),
     }
-    text = json.dumps(data, ensure_ascii=False, separators=(",", ":")) + "\n"
-    return data, text.encode("utf-8"), block, atlas
+    try:
+        # allow_nan=False: a NaN or Infinity in metadata or parameters would be written as
+        # a bare token that is not JSON, and the page could not parse the file at all.
+        text = json.dumps(data, ensure_ascii=False, separators=(",", ":"), allow_nan=False)
+        encoded = (text + "\n").encode("utf-8")
+    except ValueError as err:  # includes UnicodeEncodeError (a lone surrogate)
+        raise CliError(
+            code=EXIT_USER_ERROR,
+            message=f"the atlas at {atlas.path} holds a value that cannot be written as JSON "
+            f"text: {err}",
+            remediation=(
+                "look for NaN or Infinity in the corpus lines' extra keys or the atlas "
+                "parameters, or a broken character in a text, fix the corpus and re-run "
+                "`embeddings survey <corpus> --apply --force`"
+            ),
+        ) from err
+    return data, encoded, block, atlas
 
 
 # --------------------------------------------------------------------------
@@ -410,30 +497,63 @@ def _new_file_mode() -> int:
     return SERVED_FILE_MODE & ~umask
 
 
-def _write(json_path: Path, json_bytes: bytes, block_path: Path, block: bytes) -> None:
-    # write_atomic creates its temp file with mkstemp, which is always 0600. These two
-    # files are meant to be served by a static web server, possibly running as another
-    # user, so each is made readable (at most 0644, never group or other write, and still
-    # reduced by the umask) once it is in place.
-    # _atomic.py is shared with survey and map and is left as it is.
-    mode = _new_file_mode()
+def _stage(target: Path, data: bytes, mode: int) -> Path:
+    """Write ``data`` to a temp file beside ``target``, synced and already at ``mode``."""
+    target.parent.mkdir(parents=True, exist_ok=True)
+    fd, name = tempfile.mkstemp(dir=target.parent, prefix=f".{target.name}.", suffix=".tmp")
+    staged = Path(name)
     try:
+        with os.fdopen(fd, "wb") as handle:
+            handle.write(data)
+            handle.flush()
+            os.fchmod(handle.fileno(), mode)
+            os.fsync(handle.fileno())
+    except BaseException:
+        staged.unlink(missing_ok=True)
+        raise
+    return staged
+
+
+def _write(json_path: Path, json_bytes: bytes, block_path: Path, block: bytes) -> None:
+    # These two files are meant to be served by a static web server, possibly running as
+    # another user, so each gets mode 0644 reduced by the umask (never group or other
+    # write). The mode is set on the temp file, before it takes its final name, so the
+    # served file is never in place with a private mode.
+    mode = _new_file_mode()
+    staged: list[Path] = []
+    block_was_there = block_path.exists()
+    block_landed = False
+    try:
+        # Both files are written in full (to temp names) before anything is removed, so
+        # a full disk or an unwritable folder leaves an existing pair untouched.
+        staged_block = _stage(block_path, block, mode)
+        staged.append(staged_block)
+        staged_json = _stage(json_path, json_bytes, mode)
+        staged.append(staged_json)
         # Ordering, so a reader can never load a JSON whose block does not belong to it:
         # an existing JSON is removed first (only reachable under --force), then the
-        # block lands, then the JSON naming it. A failure at any step leaves either the
-        # full new pair or no JSON at all -- never an old JSON beside a new block, which
-        # would pass every length check when count and dimension are unchanged.
+        # block takes its name, then the JSON naming it. A failure between the steps
+        # leaves either the full new pair or no JSON at all -- never an old JSON beside
+        # a new block, which would pass every length check when count and dimension are
+        # unchanged.
         json_path.unlink(missing_ok=True)
-        write_atomic(block_path, block)
-        os.chmod(block_path, mode)
-        write_atomic(json_path, json_bytes)
-        os.chmod(json_path, mode)
-    except OSError as err:
-        raise CliError(
-            code=EXIT_ENV_ERROR,
-            message=f"failed to write the viewer data to {json_path}: {err}",
-            remediation="check the target directory is writable and has free space",
-        ) from err
+        os.replace(staged_block, block_path)
+        block_landed = True
+        os.replace(staged_json, json_path)
+    except BaseException as err:
+        for path in staged:
+            path.unlink(missing_ok=True)
+        if block_landed and not block_was_there:
+            # A first export whose JSON never landed: do not leave a lone block behind
+            # that would make the same command refuse to run again.
+            block_path.unlink(missing_ok=True)
+        if isinstance(err, OSError):
+            raise CliError(
+                code=EXIT_ENV_ERROR,
+                message=f"failed to write the viewer data to {json_path}: {err}",
+                remediation="check the target directory is writable and has free space",
+            ) from err
+        raise
 
 
 def _render_text(payload: dict) -> str:
